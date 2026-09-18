@@ -59,6 +59,9 @@ module.exports = {
     if (p) Object.assign(p, patch);
     return p || null;
   },
+  deletePlayer(playerId) {
+    return players.delete(playerId);
+  },
   getPlayersByRoom(roomId) {
     return [...players.values()].filter((p) => p.roomId === roomId);
   },

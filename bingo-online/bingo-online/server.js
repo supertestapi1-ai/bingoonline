@@ -85,9 +85,9 @@ io.on('connection', (socket) => {
       const cardCount = [20, 30, 50, 100].includes(config.cardCount) ? config.cardCount : 30;
       const maxPlayers = [10, 15, 20].includes(config.maxPlayers) ? config.maxPlayers : 20;
       const numberMin = Number.isFinite(Number(config.numberMin)) ? Number(config.numberMin) : 1;
-      const numberMax = Number.isFinite(Number(config.numberMax)) ? Number(config.numberMax) : 99;
+      const numberMax = Number.isFinite(Number(config.numberMax)) ? Number(config.numberMax) : 75;
 
-      if (numberMax - numberMin + 1 < 25) {
+      if (!Number.isInteger(numberMin) || !Number.isInteger(numberMax) || numberMin < 1 || numberMax < numberMin || numberMax > 999 || numberMax - numberMin + 1 < 25) {
         return cb({ ok: false, error: 'ช่วงเลขต้องมีอย่างน้อย 25 ค่า' });
       }
 
@@ -374,6 +374,47 @@ io.on('connection', (socket) => {
     cb({ ok: true });
   });
 
+  // 12) Leave room explicitly. Host leaving closes the room for everyone.
+  socket.on('leave_room', (_payload, cb = () => {}) => {
+    const { roomId, playerId } = socket.data;
+    const room = db.getRoom(roomId);
+    if (!room || !playerId) return cb({ ok: false, error: 'ไม่พบห้องหรือผู้เล่น' });
+
+    const player = db.getPlayer(playerId);
+    if (!player) return cb({ ok: false, error: 'ไม่พบผู้เล่น' });
+
+    socket.data.leaving = true;
+
+    // Host leaves = close room and kick everyone out.
+    if (playerId === room.hostId) {
+      io.to(roomId).emit('room_closed', {
+        reason: 'Host ออกจากห้องแล้ว ห้องถูกปิด'
+      });
+      io.in(roomId).socketsLeave(roomId);
+      db.deleteRoom(roomId);
+      socket.leave(roomId);
+      socket.data.roomId = null;
+      socket.data.playerId = null;
+      return cb({ ok: true, host: true });
+    }
+
+    // Normal player leaves = release their selected card.
+    if (player.selectedCardId) {
+      db.updateCard(player.selectedCardId, {
+        status: 'available',
+        selectedBy: null
+      });
+    }
+
+    db.deletePlayer(playerId);
+    socket.leave(roomId);
+    socket.data.roomId = null;
+    socket.data.playerId = null;
+
+    cb({ ok: true, host: false });
+    broadcastRoom(roomId);
+  });
+
   // Fetch my own card explicitly (used right after reconnect / card select)
   socket.on('get_my_card', (_payload, cb = () => {}) => {
     const { playerId } = socket.data;
@@ -382,7 +423,7 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', () => {
     const { roomId, playerId } = socket.data;
-    if (!roomId || !playerId) return;
+    if (socket.data.leaving || !roomId || !playerId) return;
     const room = db.getRoom(roomId);
     if (!room) return;
 
