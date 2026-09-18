@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>🎱 Bingo Online</title>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+
+<div id="toast" class="toast hidden"></div>
+
+<!-- HOME -->
+<section id="screen-home" class="screen active">
+  <div class="card-panel center-panel">
+    <h1 class="logo">🎱 Bingo Online</h1>
+    <p class="subtitle">เล่นบิงโกออนไลน์แบบเรียลไทม์ กับเพื่อนได้สูงสุด 20 คน</p>
+    <button class="btn btn-primary btn-lg" id="btn-go-create">สร้างห้อง</button>
+    <button class="btn btn-secondary btn-lg" id="btn-go-join">เข้าร่วมห้อง</button>
+  </div>
+</section>
+
+<!-- CREATE ROOM CONFIG -->
+<section id="screen-create" class="screen">
+  <div class="card-panel">
+    <h2>สร้างห้อง (Host)</h2>
+    <label>ชื่อของคุณ (Host)</label>
+    <input type="text" id="input-host-name" maxlength="20" placeholder="เช่น DJ Bingo" />
+
+    <label>จำนวนบัตร</label>
+    <div class="chip-group" id="chip-cardcount">
+      <button class="chip" data-value="20">20</button>
+      <button class="chip active" data-value="30">30</button>
+      <button class="chip" data-value="50">50</button>
+      <button class="chip" data-value="100">100</button>
+    </div>
+
+    <label>จำนวนผู้เล่นสูงสุด</label>
+    <div class="chip-group" id="chip-maxplayers">
+      <button class="chip" data-value="10">10</button>
+      <button class="chip" data-value="15">15</button>
+      <button class="chip active" data-value="20">20</button>
+    </div>
+
+    <label>ช่วงเลข Bingo</label>
+    <div class="chip-group" id="chip-range">
+      <button class="chip" data-min="1" data-max="50">1–50</button>
+      <button class="chip" data-min="1" data-max="75">1–75</button>
+      <button class="chip" data-min="1" data-max="90">1–90</button>
+      <button class="chip active" data-min="1" data-max="99">1–99</button>
+      <button class="chip" data-custom="1">กำหนดเอง</button>
+    </div>
+    <div class="range-custom hidden" id="range-custom-inputs">
+      <input type="number" id="input-range-min" placeholder="เริ่ม" value="1" />
+      <span>ถึง</span>
+      <input type="number" id="input-range-max" placeholder="สิ้นสุด" value="99" />
+    </div>
+
+    <button class="btn btn-primary btn-lg" id="btn-create-room">🎮 สร้างห้อง</button>
+    <button class="btn btn-ghost" id="btn-back-1">← ย้อนกลับ</button>
+  </div>
+</section>
+
+<!-- JOIN ROOM -->
+<section id="screen-join" class="screen">
+  <div class="card-panel center-panel">
+    <h2>เข้าร่วมห้อง</h2>
+    <label>Room Code</label>
+    <input type="text" id="input-room-code" placeholder="BGO-XXXX" maxlength="12" />
+    <label>ชื่อของคุณ</label>
+    <input type="text" id="input-player-name" maxlength="20" placeholder="เช่น Player 01" />
+    <button class="btn btn-primary btn-lg" id="btn-join-room">เข้าร่วม</button>
+    <button class="btn btn-ghost" id="btn-back-2">← ย้อนกลับ</button>
+  </div>
+</section>
+
+<!-- LOBBY (host + players, before game starts) -->
+<section id="screen-lobby" class="screen">
+  <div class="topbar">
+    <div>
+      <span class="room-code-badge" id="lobby-room-code">BGO-0000</span>
+    </div>
+    <div id="lobby-host-banner" class="host-warning hidden">⚠️ Host ขาดการเชื่อมต่อ</div>
+  </div>
+
+  <div class="lobby-stats">
+    <div class="stat"><span class="stat-num" id="stat-players">0/0</span><span class="stat-label">ผู้เล่น</span></div>
+    <div class="stat"><span class="stat-num" id="stat-cards">0/0</span><span class="stat-label">บัตรถูกเลือก</span></div>
+  </div>
+
+  <div id="lobby-my-status" class="my-status"></div>
+  <button class="btn btn-primary btn-lg hidden" id="btn-go-pick-card">🎱 เลือกบัตร Bingo</button>
+
+  <div class="player-list" id="lobby-player-list"></div>
+
+  <button class="btn btn-success btn-lg hidden" id="btn-start-game">🎮 เริ่มเกม</button>
+  <p class="hint hidden" id="host-start-hint"></p>
+</section>
+
+<!-- CARD SELECT -->
+<section id="screen-pick" class="screen">
+  <div class="topbar">
+    <button class="btn btn-ghost" id="btn-pick-back">← กลับ Lobby</button>
+    <span id="pick-progress" class="pick-progress"></span>
+  </div>
+  <h2 class="section-title">🎱 เลือกบัตร Bingo ของคุณ</h2>
+  <div class="card-grid" id="card-grid"></div>
+</section>
+
+<!-- CARD PREVIEW MODAL -->
+<div id="modal-preview" class="modal hidden">
+  <div class="modal-content">
+    <h3 id="preview-title">Card #01</h3>
+    <div class="mini-grid" id="preview-grid"></div>
+    <button class="btn btn-primary btn-lg" id="btn-select-this-card">เลือกบัตรนี้</button>
+    <button class="btn btn-ghost" id="btn-close-preview">ปิด</button>
+  </div>
+</div>
+
+<!-- GAME BOARD -->
+<section id="screen-game" class="screen">
+  <div class="topbar">
+    <span class="room-code-badge" id="game-room-code">BGO-0000</span>
+    <button class="btn btn-ghost btn-sm hidden" id="btn-toggle-host-panel">🎛 Host</button>
+  </div>
+
+  <div id="game-host-banner" class="host-warning hidden">⚠️ Host ขาดการเชื่อมต่อ</div>
+
+  <div class="current-number-box">
+    <div class="bingo-ball">🎱</div>
+    <div class="current-number" id="current-number">-</div>
+    <div class="remaining-label" id="remaining-label"></div>
+  </div>
+
+  <div class="called-history" id="called-history"></div>
+
+  <div class="my-card-wrap">
+    <div class="mini-grid big-grid" id="my-card-grid"></div>
+  </div>
+
+  <!-- Host controls (collapsible panel) -->
+  <div id="host-panel" class="host-panel hidden">
+    <button class="btn btn-primary btn-lg" id="btn-draw-number">🎲 สุ่มเลข</button>
+    <button class="btn btn-danger" id="btn-end-game">🏁 จบเกม</button>
+    <div class="host-player-list" id="host-player-list"></div>
+  </div>
+</section>
+
+<!-- BINGO POPUP -->
+<div id="modal-bingo" class="modal hidden">
+  <div class="modal-content bingo-modal">
+    <div class="bingo-title">🎉 BINGO! 🎉</div>
+    <div id="bingo-names"></div>
+    <button class="btn btn-primary" id="btn-close-bingo">ปิด</button>
+  </div>
+</div>
+
+<!-- RESULTS -->
+<section id="screen-results" class="screen">
+  <div class="card-panel">
+    <h2>🏆 ผลการแข่งขัน</h2>
+    <div id="results-list" class="results-list"></div>
+    <button class="btn btn-primary btn-lg hidden" id="btn-play-again-host"></button>
+    <div id="play-again-options" class="hidden">
+      <label><input type="radio" name="reuse" value="new" checked /> เลือกบัตรใหม่</label>
+      <label><input type="radio" name="reuse" value="reuse" /> ใช้บัตรเดิม</label>
+      <button class="btn btn-success btn-lg" id="btn-confirm-play-again">🔄 เล่นเกมใหม่</button>
+    </div>
+    <p class="hint" id="results-wait-hint">รอ Host เริ่มเกมใหม่...</p>
+  </div>
+</section>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="/js/app.js"></script>
+</body>
+</html>
