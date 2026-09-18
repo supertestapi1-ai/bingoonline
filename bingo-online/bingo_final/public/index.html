@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#080d24">
+<title>Bingo Online</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/style.css?v=6">
+</head>
+<body>
+<div class="ambient"><i class="ball-float f1">B</i><i class="ball-float f2">7</i><i class="ball-float f3">G</i><i class="ball-float f4">16</i><i class="ball-float f5">O</i></div>
+<div id="toast" class="toast hidden"></div>
+
+<section id="screen-home" class="screen active">
+  <div class="home-shell">
+    <div class="home-brand"><div class="brand-balls"><b>B</b><b>I</b><b>N</b><b>G</b><b>O</b></div><div class="brand-sub">REAL-TIME BINGO</div></div>
+    <h1>Bingo Online</h1>
+    <p class="hero-copy">สร้างห้อง เล่นกับเพื่อน และลุ้นบิงโกพร้อมกันแบบเรียลไทม์</p>
+    <div class="home-actions">
+      <button class="btn btn-primary btn-xl" id="btn-go-create"><span>👑</span><strong>สร้างห้อง</strong><small>เป็น Host และควบคุมเกม</small></button>
+      <button class="btn btn-secondary btn-xl" id="btn-go-join"><span>🎟️</span><strong>เข้าร่วมห้อง</strong><small>ใช้รหัสจาก Host</small></button>
+    </div>
+    <div class="trust-row"><span>⚡ Real-time</span><span>🏆 ตรวจ Bingo อัตโนมัติ</span><span>📱 มือถือก็เล่นได้</span></div>
+  </div>
+</section>
+
+<section id="screen-create" class="screen">
+  <div class="form-shell">
+    <button class="back-link" id="btn-back-1">← กลับหน้าหลัก</button>
+    <div class="form-head"><div class="icon-box">👑</div><div><div class="eyebrow">CREATE ROOM</div><h2>สร้างห้อง Bingo</h2><p>ตั้งค่ากติกา แล้วส่งรหัสให้เพื่อน</p></div></div>
+    <label for="input-host-name">ชื่อของคุณ <em>*</em></label>
+    <input id="input-host-name" maxlength="20" autocomplete="name" placeholder="ใส่ชื่อที่จะแสดงในห้อง">
+    <div class="required-note">ชื่อจำเป็นต้องกรอกก่อนสร้างห้อง</div>
+    <div class="form-grid-2">
+      <div><label>จำนวนบัตร</label><div class="chips" id="chip-cardcount"><button class="chip" data-value="20">20</button><button class="chip active" data-value="30">30</button><button class="chip" data-value="50">50</button><button class="chip" data-value="100">100</button></div></div>
+      <div><label>ผู้เล่นสูงสุด</label><div class="chips" id="chip-maxplayers"><button class="chip" data-value="10">10</button><button class="chip" data-value="15">15</button><button class="chip active" data-value="20">20</button></div></div>
+    </div>
+    <label>ชุดเลขในเกม</label>
+    <div class="range-cards" id="chip-range">
+      <button class="range-card active" data-min="1" data-max="75"><strong>75</strong><span>เลข</span><small>มาตรฐาน</small></button>
+      <button class="range-card" data-min="1" data-max="80"><strong>80</strong><span>เลข</span><small>เพิ่มความหลากหลาย</small></button>
+      <button class="range-card" data-min="1" data-max="99"><strong>99</strong><span>เลข</span><small>เกมยาวขึ้น</small></button>
+      <button class="range-card" data-custom="1"><strong>⚙</strong><span>กำหนดเอง</span><small>เลือกช่วงเลข</small></button>
+    </div>
+    <div id="range-custom-inputs" class="custom-range hidden"><input type="number" id="input-range-min" min="1" value="1"><span>ถึง</span><input type="number" id="input-range-max" min="25" value="99"></div>
+    <div class="range-preview"><span>🎱 ช่วงเลข</span><strong id="create-range-preview">1 – 75</strong><span>รวม <b id="create-range-count">75</b> ตัว</span></div>
+    <button class="btn btn-primary btn-xl form-submit" id="btn-create-room">สร้างห้องและเข้า Lobby <span>→</span></button>
+  </div>
+</section>
+
+<section id="screen-join" class="screen">
+  <div class="form-shell narrow">
+    <button class="back-link" id="btn-back-2">← กลับหน้าหลัก</button>
+    <div class="form-head"><div class="icon-box purple">🎟️</div><div><div class="eyebrow">JOIN ROOM</div><h2>เข้าร่วมห้อง</h2><p>กรอกรหัสห้องและชื่อของคุณ</p></div></div>
+    <label for="input-room-code">รหัสห้อง <em>*</em></label><input id="input-room-code" maxlength="12" autocomplete="off" placeholder="BGO-8278" class="room-input">
+    <label for="input-player-name">ชื่อของคุณ <em>*</em></label><input id="input-player-name" maxlength="20" autocomplete="name" placeholder="ชื่อที่เพื่อนจะเห็น">
+    <button class="btn btn-primary btn-xl form-submit" id="btn-join-room">เข้าห้อง <span>→</span></button>
+  </div>
+</section>
+
+<section id="screen-lobby" class="screen">
+  <div class="page-shell">
+    <header class="topbar"><div class="room-badge"><span>🎱</span><b id="lobby-room-code">BGO-0000</b></div><div class="top-actions"><span id="lobby-host-banner" class="warning hidden">⚠️ Host หลุด</span><button class="btn btn-exit" id="btn-leave-lobby">🚪 ออกจากห้อง</button></div></header>
+    <div class="lobby-hero"><div><div class="eyebrow">GAME LOBBY</div><h2>พร้อมหรือยัง?</h2><p id="lobby-config">75 เลข • 30 บัตร • สูงสุด 20 คน</p></div><div class="host-pill" id="lobby-role">👑 Host</div></div>
+    <div class="stats"><div><b id="stat-players">0/20</b><span>ผู้เล่น</span></div><div><b id="stat-cards">0/30</b><span>บัตรถูกเลือก</span></div><div><b id="stat-range">75</b><span>เลขในเกม</span></div></div>
+    <div id="lobby-my-status" class="selection-status">ยังไม่ได้เลือกบัตร</div>
+    <div class="lobby-actions"><button class="btn btn-secondary btn-lg" id="btn-go-pick-card">🎟️ เลือกบัตร Bingo</button><button class="btn btn-success btn-lg hidden" id="btn-start-game">🎮 เริ่มเกม</button></div>
+    <p id="host-start-hint" class="hint hidden">เลือกบัตรให้เรียบร้อย แล้วกดเริ่มเกมเมื่อทุกคนพร้อม</p>
+    <div class="players-panel"><div class="panel-head"><div><span class="eyebrow">PLAYERS</span><h3>คนในห้อง</h3></div><span id="player-online-count">0 คน</span></div><div id="lobby-player-list" class="player-list"></div></div>
+  </div>
+</section>
+
+<section id="screen-pick" class="screen">
+  <div class="page-shell"><header class="topbar"><button class="back-link" id="btn-pick-back">← Lobby</button><div class="room-badge"><span>🎟️</span><b id="pick-progress">0/30</b></div></header><div class="pick-head"><div><div class="eyebrow">CARD SELECT</div><h2>เลือกบัตรของคุณ</h2><p>แตะบัตรเพื่อดูตัวอย่าง แล้วกด “เลือกบัตรนี้”</p></div></div><div id="card-grid" class="card-grid"></div></div>
+</section>
+
+<div id="modal-preview" class="modal hidden"><div class="modal-box preview-box"><button class="modal-x" id="btn-close-preview">×</button><div class="eyebrow">CARD PREVIEW</div><h3 id="preview-title">บัตร #01</h3><div class="bingo-head"><b>B</b><b>I</b><b>N</b><b>G</b><b>O</b></div><div id="preview-grid" class="bingo-grid preview-grid"></div><button class="btn btn-primary btn-lg" id="btn-select-this-card">เลือกบัตรนี้ ✓</button></div></div>
+
+<section id="screen-game" class="screen">
+  <div class="page-shell"><header class="topbar"><div class="room-badge"><span>🎱</span><b id="game-room-code">BGO-0000</b></div><div class="game-user"><span id="game-player-name"></span><button class="btn btn-exit" id="btn-leave-game">🚪 ออกจากห้อง</button></div></header>
+    <div id="game-host-banner" class="warning hidden">⚠️ Host ขาดการเชื่อมต่อชั่วคราว</div>
+    <div class="game-layout"><main>
+      <div class="draw-card"><div class="draw-brand"><div class="brand-balls small"><b>B</b><b>I</b><b>N</b><b>G</b><b>O</b></div><span>เลขที่ออกล่าสุด</span></div><div class="draw-center"><div class="draw-ball" id="current-number">–</div><div class="draw-meta"><b id="remaining-label">75</b><span>เลขเหลือ</span></div></div></div>
+      <div class="called-card"><div class="panel-head"><h3>📣 เลขที่ออกแล้ว</h3><span id="called-count">0</span></div><div id="called-history" class="called-history"></div></div>
+      <div class="my-bingo-card"><div class="my-card-top"><div><div class="eyebrow">YOUR CARD</div><h3>🎟️ บัตรของฉัน</h3></div><span id="my-card-number" class="card-id">ยังไม่เลือก</span></div><div class="bingo-head"><b>B</b><b>I</b><b>N</b><b>G</b><b>O</b></div><div id="my-card-grid" class="bingo-grid player-grid"></div><p class="hint center">เลขที่ออกแล้วจะเรืองแสงสีทอง แตะเพื่อทำเครื่องหมาย</p></div>
+    </main>
+    <aside id="host-panel" class="host-panel hidden"><div class="host-title"><div><div class="eyebrow">CONTROL ROOM</div><h3>👑 Host Control</h3></div><span class="live">● LIVE</span></div><button class="btn btn-primary btn-xl" id="btn-draw-number">🎲 สุ่มเลขถัดไป</button><button class="btn btn-danger" id="btn-end-game">🏁 จบเกม</button><div class="host-section"><div class="panel-head"><h3>🔢 เลขทั้งหมด</h3><strong id="number-board-total">75</strong></div><div id="number-board" class="number-board"></div></div><div class="host-section"><div class="panel-head"><h3>🏆 คนที่ Bingo</h3><strong id="winner-count">0</strong></div><div id="host-winners" class="host-list"></div></div><div class="host-section"><div class="panel-head"><h3>👥 ผู้เล่น</h3><strong id="host-player-count">0</strong></div><div id="host-player-list" class="host-list"></div></div></aside></div>
+  </div>
+</section>
+
+<div id="modal-bingo" class="modal hidden"><div class="modal-box bingo-box"><button class="modal-x" id="btn-close-bingo">×</button><div class="confetti">✦ ✧ ✦ ✧ ✦</div><div class="bingo-word">BINGO!</div><div id="bingo-names"></div><button class="btn btn-primary btn-lg" id="btn-close-bingo-2">สุดยอด! 🎉</button></div></div>
+
+<section id="screen-results" class="screen"><div class="form-shell results-box"><div class="brand-sub">GAME OVER</div><h2>🏆 ผลการแข่งขัน</h2><div id="results-list" class="results-list"></div><div id="play-again-options" class="hidden"><label class="radio"><input type="radio" name="reuse" value="new" checked> แจกบัตรใหม่</label><label class="radio"><input type="radio" name="reuse" value="reuse"> ใช้บัตรเดิม</label><button class="btn btn-success btn-lg" id="btn-confirm-play-again">🔄 เล่นเกมใหม่</button></div><p id="results-wait-hint" class="hint center">รอ Host เริ่มเกมใหม่...</p></div></section>
+<script src="/socket.io/socket.io.js"></script><script src="/js/app.js?v=6"></script>
+</body></html>
