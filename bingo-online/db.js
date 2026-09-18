@@ -54,13 +54,13 @@ module.exports = {
   getPlayer(playerId) {
     return players.get(playerId) || null;
   },
+  deletePlayer(playerId) {
+    return players.delete(playerId);
+  },
   updatePlayer(playerId, patch) {
     const p = players.get(playerId);
     if (p) Object.assign(p, patch);
     return p || null;
-  },
-  deletePlayer(playerId) {
-    return players.delete(playerId);
   },
   getPlayersByRoom(roomId) {
     return [...players.values()].filter((p) => p.roomId === roomId);

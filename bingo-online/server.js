@@ -34,6 +34,7 @@ function roomStatePayload(room) {
   const cards = db.getCardsByRoom(room.roomId).map((c) => ({
     cardId: c.cardId,
     cardNumber: c.cardNumber,
+    numbers: c.numbers,
     status: c.status,
     selectedBy: c.selectedBy,
   }));
@@ -82,6 +83,9 @@ io.on('connection', (socket) => {
   // 1) HOST creates a room
   socket.on('create_room', ({ hostName, config = {} }, cb = () => {}) => {
     try {
+      const cleanHostName = String(hostName || '').trim();
+      if (!cleanHostName) return cb({ ok: false, error: 'กรุณากรอกชื่อ Host ก่อนสร้างห้อง' });
+      if (cleanHostName.length > 20) return cb({ ok: false, error: 'ชื่อยาวเกิน 20 ตัวอักษร' });
       const cardCount = [20, 30, 50, 100].includes(config.cardCount) ? config.cardCount : 30;
       const maxPlayers = [10, 15, 20].includes(config.maxPlayers) ? config.maxPlayers : 20;
       const numberMin = Number.isFinite(Number(config.numberMin)) ? Number(config.numberMin) : 1;
@@ -128,7 +132,7 @@ io.on('connection', (socket) => {
       db.createPlayer({
         playerId: hostId,
         roomId,
-        playerName: (hostName || 'Host').trim() || 'Host',
+        playerName: cleanHostName,
         selectedCardId: null,
         markedNumbers: [],
         connected: true,
@@ -150,6 +154,9 @@ io.on('connection', (socket) => {
 
   // 2) PLAYER joins a room by code
   socket.on('join_room', ({ roomCode, playerName }, cb = () => {}) => {
+    const cleanPlayerName = String(playerName || '').trim();
+    if (!cleanPlayerName) return cb({ ok: false, error: 'กรุณากรอกชื่อก่อนเข้าห้อง' });
+    if (cleanPlayerName.length > 20) return cb({ ok: false, error: 'ชื่อยาวเกิน 20 ตัวอักษร' });
     const room = db.getRoomByCode((roomCode || '').trim().toUpperCase());
     if (!room) return cb({ ok: false, error: 'ไม่พบห้องนี้ ตรวจสอบ Room Code อีกครั้ง' });
 
@@ -161,7 +168,7 @@ io.on('connection', (socket) => {
     db.createPlayer({
       playerId,
       roomId: room.roomId,
-      playerName: (playerName || 'Player').trim() || 'Player',
+      playerName: cleanPlayerName,
       selectedCardId: null,
       markedNumbers: [],
       connected: true,
@@ -352,6 +359,33 @@ io.on('connection', (socket) => {
     cb({ ok: true });
   });
 
+  // Leave room: player releases their card; Host closes the entire room.
+  socket.on('leave_room', (_payload, cb = () => {}) => {
+    const { roomId, playerId } = socket.data;
+    const room = db.getRoom(roomId);
+    if (!room) return cb({ ok: false, error: 'ไม่พบห้อง' });
+
+    if (playerId === room.hostId) {
+      io.to(roomId).emit('room_closed', { message: 'Host ออกจากห้อง ห้องนี้ถูกปิดแล้ว' });
+      db.deleteRoom(roomId);
+      socket.leave(roomId);
+      socket.data.roomId = null;
+      socket.data.playerId = null;
+      return cb({ ok: true, closed: true });
+    }
+
+    const player = db.getPlayer(playerId);
+    if (player && player.selectedCardId) {
+      db.updateCard(player.selectedCardId, { status: 'available', selectedBy: null });
+    }
+    db.deletePlayer(playerId);
+    socket.leave(roomId);
+    socket.data.roomId = null;
+    socket.data.playerId = null;
+    broadcastRoom(roomId);
+    cb({ ok: true });
+  });
+
   // 10) Host restarts — reuse cards or let everyone pick again (default)
   socket.on('play_again', ({ reuseCards }, cb = () => {}) => {
     const { roomId, playerId } = socket.data;
@@ -374,47 +408,6 @@ io.on('connection', (socket) => {
     cb({ ok: true });
   });
 
-  // 12) Leave room explicitly. Host leaving closes the room for everyone.
-  socket.on('leave_room', (_payload, cb = () => {}) => {
-    const { roomId, playerId } = socket.data;
-    const room = db.getRoom(roomId);
-    if (!room || !playerId) return cb({ ok: false, error: 'ไม่พบห้องหรือผู้เล่น' });
-
-    const player = db.getPlayer(playerId);
-    if (!player) return cb({ ok: false, error: 'ไม่พบผู้เล่น' });
-
-    socket.data.leaving = true;
-
-    // Host leaves = close room and kick everyone out.
-    if (playerId === room.hostId) {
-      io.to(roomId).emit('room_closed', {
-        reason: 'Host ออกจากห้องแล้ว ห้องถูกปิด'
-      });
-      io.in(roomId).socketsLeave(roomId);
-      db.deleteRoom(roomId);
-      socket.leave(roomId);
-      socket.data.roomId = null;
-      socket.data.playerId = null;
-      return cb({ ok: true, host: true });
-    }
-
-    // Normal player leaves = release their selected card.
-    if (player.selectedCardId) {
-      db.updateCard(player.selectedCardId, {
-        status: 'available',
-        selectedBy: null
-      });
-    }
-
-    db.deletePlayer(playerId);
-    socket.leave(roomId);
-    socket.data.roomId = null;
-    socket.data.playerId = null;
-
-    cb({ ok: true, host: false });
-    broadcastRoom(roomId);
-  });
-
   // Fetch my own card explicitly (used right after reconnect / card select)
   socket.on('get_my_card', (_payload, cb = () => {}) => {
     const { playerId } = socket.data;
@@ -423,7 +416,7 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', () => {
     const { roomId, playerId } = socket.data;
-    if (socket.data.leaving || !roomId || !playerId) return;
+    if (!roomId || !playerId) return;
     const room = db.getRoom(roomId);
     if (!room) return;
 
