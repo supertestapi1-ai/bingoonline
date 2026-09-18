@@ -53,6 +53,7 @@ function roomStatePayload(room) {
     currentNumber: room.currentNumber,
     calledNumbers: room.calledNumbers,
     winners: room.winners,
+    playAgainChoices: room.playAgainChoices || {},
     players,
     cards,
   };
@@ -112,6 +113,7 @@ io.on('connection', (socket) => {
         currentNumber: null,
         calledNumbers: [],
         winners: [],
+        playAgainChoices: {},
         createdAt: Date.now(),
       };
       db.createRoom(room);
@@ -272,7 +274,14 @@ io.on('connection', (socket) => {
     if (!room || room.hostId !== playerId) return cb({ ok: false, error: 'เฉพาะ Host เท่านั้นที่เริ่มเกมได้' });
     if (room.gameStatus !== 'lobby') return cb({ ok: false, error: 'เกมเริ่มไปแล้ว' });
 
-    db.updateRoom(roomId, { gameStatus: 'playing', currentNumber: null, calledNumbers: [], winners: [] });
+    const players = db.getPlayersByRoom(roomId).filter((p) => p.playerId !== room.hostId);
+    if (players.length === 0) return cb({ ok: false, error: 'ต้องมีผู้เล่นอย่างน้อย 1 คนก่อนเริ่มเกม' });
+    const notReady = players.filter((p) => !p.selectedCardId);
+    if (notReady.length > 0) {
+      return cb({ ok: false, error: `ยังมีผู้เล่น ${notReady.length} คนที่ยังไม่ได้เลือกบัตร` });
+    }
+
+    db.updateRoom(roomId, { gameStatus: 'playing', currentNumber: null, calledNumbers: [], winners: [], playAgainChoices: {} });
     io.to(roomId).emit('game_started');
     broadcastRoom(roomId);
     cb({ ok: true });
@@ -408,26 +417,56 @@ io.on('connection', (socket) => {
     cb({ ok: true });
   });
 
-  // 10) Host restarts — reuse cards or let everyone pick again (default)
-  socket.on('play_again', ({ reuseCards }, cb = () => {}) => {
+  // 10) Each player chooses how they want to continue after a game ends.
+  // 'reuse' keeps the current card; 'new' releases it. Once every player has chosen,
+  // the room automatically returns to lobby. The Host does not need to choose.
+  socket.on('play_again_choice', ({ choice }, cb = () => {}) => {
     const { roomId, playerId } = socket.data;
     const room = db.getRoom(roomId);
-    if (!room || room.hostId !== playerId) return cb({ ok: false, error: 'เฉพาะ Host เท่านั้น' });
+    if (!room) return cb({ ok: false, error: 'ไม่พบห้อง' });
+    if (room.gameStatus !== 'ended') return cb({ ok: false, error: 'ยังไม่อยู่ในช่วงเลือกบัตรรอบใหม่' });
+    if (playerId === room.hostId) return cb({ ok: false, error: 'Host ไม่ต้องเลือกบัตร' });
+    if (!['new', 'reuse'].includes(choice)) return cb({ ok: false, error: 'ตัวเลือกไม่ถูกต้อง' });
 
-    const players = db.getPlayersByRoom(roomId);
-    const cards = db.getCardsByRoom(roomId);
+    const player = db.getPlayer(playerId);
+    if (!player || player.roomId !== roomId) return cb({ ok: false, error: 'ไม่พบผู้เล่นในห้อง' });
 
-    if (!reuseCards) {
-      cards.forEach((c) => db.updateCard(c.cardId, { status: 'available', selectedBy: null }));
-      players.forEach((p) => db.updatePlayer(p.playerId, { selectedCardId: null, markedNumbers: [] }));
+    const choices = { ...(room.playAgainChoices || {}), [playerId]: choice };
+    db.updateRoom(roomId, { playAgainChoices: choices });
+
+    const players = db.getPlayersByRoom(roomId).filter((p) => p.playerId !== room.hostId);
+    const allChosen = players.length > 0 && players.every((p) => choices[p.playerId]);
+
+    if (allChosen) {
+      const cards = db.getCardsByRoom(roomId);
+      for (const p of players) {
+        const selected = p.selectedCardId ? db.getCard(p.selectedCardId) : null;
+        if (choices[p.playerId] === 'new') {
+          if (selected) db.updateCard(selected.cardId, { status: 'available', selectedBy: null });
+          db.updatePlayer(p.playerId, { selectedCardId: null, markedNumbers: [] });
+        } else {
+          if (selected) db.updateCard(selected.cardId, { status: 'selected', selectedBy: p.playerId });
+          db.updatePlayer(p.playerId, { markedNumbers: [] });
+        }
+      }
+
+      // Any card that was not kept by a player becomes available.
+      const kept = new Set(players.filter((p) => choices[p.playerId] === 'reuse' && p.selectedCardId).map((p) => p.selectedCardId));
+      cards.forEach((c) => {
+        if (!kept.has(c.cardId)) db.updateCard(c.cardId, { status: 'available', selectedBy: null });
+      });
+
+      db.updateRoom(roomId, { gameStatus: 'lobby', currentNumber: null, calledNumbers: [], winners: [], playAgainChoices: {} });
+      io.to(roomId).emit('game_reset', { message: 'ผู้เล่นเลือกการ์ดรอบใหม่ครบแล้ว' });
     } else {
-      players.forEach((p) => db.updatePlayer(p.playerId, { markedNumbers: [] }));
+      io.to(roomId).emit('play_again_progress', {
+        chosen: players.filter((p) => choices[p.playerId]).length,
+        total: players.length,
+      });
     }
 
-    db.updateRoom(roomId, { gameStatus: 'lobby', currentNumber: null, calledNumbers: [], winners: [] });
-    io.to(roomId).emit('game_reset', { reuseCards: !!reuseCards });
+    cb({ ok: true, choice, allChosen });
     broadcastRoom(roomId);
-    cb({ ok: true });
   });
 
   // Fetch my own card explicitly (used right after reconnect / card select)

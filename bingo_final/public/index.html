@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/css/style.css?v=7">
+<link rel="stylesheet" href="/css/style.css?v=8">
 </head>
 <body>
 <div class="ambient"><i class="ball-float f1">B</i><i class="ball-float f2">7</i><i class="ball-float f3">G</i><i class="ball-float f4">16</i><i class="ball-float f5">O</i></div>
@@ -85,14 +85,15 @@
     <div class="game-layout"><main>
       <div class="draw-card"><div class="draw-brand"><div class="brand-balls small"><b>B</b><b>I</b><b>N</b><b>G</b><b>O</b></div><span>เลขที่ออกล่าสุด</span></div><div class="draw-center"><div class="draw-ball" id="current-number">–</div><div class="draw-meta"><b id="remaining-label">75</b><span>เลขเหลือ</span></div></div></div>
       <div class="called-card"><div class="panel-head"><h3>📣 เลขที่ออกแล้ว</h3><span id="called-count">0</span></div><div id="called-history" class="called-history"></div></div>
+      <div id="host-main-board" class="host-main-board hidden"><div class="host-main-board-head"><div><div class="eyebrow">HOST NUMBER BOARD</div><h3>👑 เลขทั้งหมดในเกม</h3></div><strong id="host-main-board-count">75</strong></div><div id="host-main-number-board" class="number-board number-board-large"></div><p class="hint center">เลขสีทอง = เลขล่าสุด • เลขสีแดง = ออกไปแล้ว</p></div>
       <div class="my-bingo-card"><div class="my-card-top"><div><div class="eyebrow">YOUR CARD</div><h3>🎟️ บัตรของฉัน</h3></div><span id="my-card-number" class="card-id">ยังไม่เลือก</span></div><div class="bingo-head"><b>B</b><b>I</b><b>N</b><b>G</b><b>O</b></div><div id="my-card-grid" class="bingo-grid player-grid"></div><p class="hint center">เลขที่ออกแล้วจะเรืองแสงสีทอง แตะเพื่อทำเครื่องหมาย</p></div>
     </main>
-    <aside id="host-panel" class="host-panel hidden"><div class="host-title"><div><div class="eyebrow">CONTROL ROOM</div><h3>👑 Host Control</h3></div><span class="live">● LIVE</span></div><button class="btn btn-primary btn-xl" id="btn-draw-number">🎲 สุ่มเลขถัดไป</button><button class="btn btn-danger" id="btn-end-game">🏁 จบเกม</button><div class="host-section"><div class="panel-head"><h3>🔢 เลขทั้งหมด</h3><strong id="number-board-total">75</strong></div><div id="number-board" class="number-board"></div></div><div class="host-section"><div class="panel-head"><h3>🏆 คนที่ Bingo</h3><strong id="winner-count">0</strong></div><div id="host-winners" class="host-list"></div></div><div class="host-section"><div class="panel-head"><h3>👥 ผู้เล่น</h3><strong id="host-player-count">0</strong></div><div id="host-player-list" class="host-list"></div></div></aside></div>
+    <aside id="host-panel" class="host-panel hidden"><div class="host-title"><div><div class="eyebrow">CONTROL ROOM</div><h3>👑 Host Control</h3></div><span class="live">● LIVE</span></div><button class="btn btn-primary btn-xl" id="btn-draw-number">🎲 สุ่มเลขถัดไป</button><button class="btn btn-danger" id="btn-end-game">🏁 จบเกม</button><div id="host-side-number-section" class="host-section hidden"><div class="panel-head"><h3>🔢 เลขทั้งหมด</h3><strong id="number-board-total">75</strong></div><div id="number-board" class="number-board"></div></div><div class="host-section"><div class="panel-head"><h3>🏆 คนที่ Bingo</h3><strong id="winner-count">0</strong></div><div id="host-winners" class="host-list"></div></div><div class="host-section"><div class="panel-head"><h3>👥 ผู้เล่น</h3><strong id="host-player-count">0</strong></div><div id="host-player-list" class="host-list"></div></div></aside></div>
   </div>
 </section>
 
 <div id="modal-bingo" class="modal hidden"><div class="modal-box bingo-box"><button class="modal-x" id="btn-close-bingo">×</button><div class="confetti">✦ ✧ ✦ ✧ ✦</div><div class="bingo-word">BINGO!</div><div id="bingo-names"></div><button class="btn btn-primary btn-lg" id="btn-close-bingo-2">สุดยอด! 🎉</button></div></div>
 
-<section id="screen-results" class="screen"><div class="form-shell results-box"><div class="brand-sub">GAME OVER</div><h2>🏆 ผลการแข่งขัน</h2><div id="results-list" class="results-list"></div><div id="play-again-options" class="hidden"><label class="radio"><input type="radio" name="reuse" value="new" checked> แจกบัตรใหม่</label><label class="radio"><input type="radio" name="reuse" value="reuse"> ใช้บัตรเดิม</label><button class="btn btn-success btn-lg" id="btn-confirm-play-again">🔄 เล่นเกมใหม่</button></div><p id="results-wait-hint" class="hint center">รอ Host เริ่มเกมใหม่...</p></div></section>
-<script src="/socket.io/socket.io.js"></script><script src="/js/app.js?v=7"></script>
+<section id="screen-results" class="screen"><div class="form-shell results-box"><div class="brand-sub">GAME OVER</div><h2>🏆 ผลการแข่งขัน</h2><div id="results-list" class="results-list"></div><div id="play-again-options" class="hidden"><p class="hint center">เลือกสำหรับตัวคุณเองได้เลย</p><div class="play-again-choice"><button class="btn btn-primary btn-lg" id="btn-new-card">🎟️ รับบัตรใหม่</button><button class="btn btn-secondary btn-lg" id="btn-reuse-card">♻️ ใช้บัตรเดิม</button></div><div id="play-again-status" class="selection-status">ยังไม่ได้เลือกสำหรับรอบถัดไป</div></div><p id="results-wait-hint" class="hint center">กำลังรอผู้เล่นคนอื่นเลือกบัตร…</p></div></section>
+<script src="/socket.io/socket.io.js"></script><script src="/js/app.js?v=8"></script>
 </body></html>
