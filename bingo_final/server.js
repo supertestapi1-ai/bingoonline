@@ -11,6 +11,98 @@ const { generateCards, checkBingo, generateRoomCode } = require('./gameLogic');
 // Global server safety limit: maximum 80 players across all rooms.
 const MAX_SERVER_PLAYERS = 80;
 
+// After a game ends, keep the room for a short grace period so players can
+// refresh/reconnect. If every non-host player has left the browser and stays
+// offline for the full delay, reset the same room back to the lobby so the
+// Host can continue using the same Room Code for a new group of players.
+const POST_GAME_RESET_DELAY_MS = 15_000;
+const postGameResetTimers = new Map();
+
+function clearPostGameResetTimer(roomId) {
+  const timer = postGameResetTimers.get(roomId);
+  if (timer) {
+    clearTimeout(timer);
+    postGameResetTimers.delete(roomId);
+  }
+}
+
+function resetRoomAfterEveryoneLeaves(roomId) {
+  const room = db.getRoom(roomId);
+  if (!room || room.gameStatus !== 'ended' || !room.hostConnected) {
+    clearPostGameResetTimer(roomId);
+    return;
+  }
+
+  const players = db.getPlayersByRoom(roomId);
+  const nonHosts = players.filter((p) => p.playerId !== room.hostId);
+  const onlineNonHosts = nonHosts.filter((p) => p.connected);
+
+  // Someone came back before the grace period finished. Keep the room as-is.
+  if (onlineNonHosts.length > 0) {
+    clearPostGameResetTimer(roomId);
+    return;
+  }
+
+  // Release every old player's card and remove the old player records.
+  nonHosts.forEach((p) => {
+    if (p.selectedCardId) {
+      db.updateCard(p.selectedCardId, { status: 'available', selectedBy: null });
+    }
+    db.deletePlayer(p.playerId);
+  });
+
+  // Keep the same room and same Host, but prepare it for a brand-new group.
+  db.updateRoom(roomId, {
+    gameStatus: 'lobby',
+    currentNumber: null,
+    calledNumbers: [],
+    winners: [],
+    playAgainChoices: {},
+  });
+
+  // Defensive cleanup: no card should remain locked by an old player.
+  db.getCardsByRoom(roomId).forEach((c) => {
+    if (c.selectedBy !== room.hostId) {
+      db.updateCard(c.cardId, { status: 'available', selectedBy: null });
+    }
+  });
+
+  clearPostGameResetTimer(roomId);
+  io.to(roomId).emit('game_reset', {
+    reason: 'all_players_left',
+    message: 'ผู้เล่นชุดเดิมออกจากห้องหมดแล้ว ห้องเดิมพร้อมรับผู้เล่นชุดใหม่',
+  });
+  broadcastRoom(roomId);
+}
+
+function schedulePostGameReset(roomId) {
+  const room = db.getRoom(roomId);
+  if (!room || room.gameStatus !== 'ended' || !room.hostConnected) return;
+
+  const players = db.getPlayersByRoom(roomId);
+  const nonHosts = players.filter((p) => p.playerId !== room.hostId);
+  const onlineNonHosts = nonHosts.filter((p) => p.connected);
+
+  if (onlineNonHosts.length > 0) {
+    clearPostGameResetTimer(roomId);
+    return;
+  }
+
+  if (postGameResetTimers.has(roomId)) return;
+
+  io.to(roomId).emit('post_game_reset_pending', {
+    seconds: Math.ceil(POST_GAME_RESET_DELAY_MS / 1000),
+    message: 'ผู้เล่นชุดเดิมออกจากห้องหมดแล้ว ระบบจะเตรียมห้องเดิมสำหรับผู้เล่นชุดใหม่',
+  });
+
+  const timer = setTimeout(() => {
+    postGameResetTimers.delete(roomId);
+    resetRoomAfterEveryoneLeaves(roomId);
+  }, POST_GAME_RESET_DELAY_MS);
+
+  postGameResetTimers.set(roomId, timer);
+}
+
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
@@ -200,6 +292,7 @@ io.on('connection', (socket) => {
       return cb({ ok: false, error: 'ไม่พบผู้เล่นคนนี้ในห้อง' });
     }
 
+    clearPostGameResetTimer(room.roomId);
     db.updatePlayer(playerId, { connected: true, socketId: socket.id });
     if (playerId === room.hostId) db.updateRoom(room.roomId, { hostConnected: true });
 
@@ -383,6 +476,9 @@ io.on('connection', (socket) => {
     db.updateRoom(roomId, { gameStatus: 'ended' });
     io.to(roomId).emit('game_ended', { winners: room.winners });
     broadcastRoom(roomId);
+    // If nobody is connected anymore except the Host, start the same-room
+    // cleanup grace period immediately. Otherwise normal play-again flow stays untouched.
+    schedulePostGameReset(roomId);
     cb({ ok: true });
   });
 
@@ -431,6 +527,7 @@ io.on('connection', (socket) => {
     socket.leave(roomId);
     socket.data.roomId = null;
     socket.data.playerId = null;
+    if (room.gameStatus === 'ended') schedulePostGameReset(roomId);
     broadcastRoom(roomId);
     cb({ ok: true });
   });
@@ -569,7 +666,11 @@ io.on('connection', (socket) => {
     db.updatePlayer(playerId, { connected: false });
     if (playerId === room.hostId) {
       db.updateRoom(roomId, { hostConnected: false });
+      clearPostGameResetTimer(roomId);
       io.to(roomId).emit('host_disconnected');
+    } else if (room.gameStatus === 'ended') {
+      // Once every non-host player is offline, start the grace timer.
+      schedulePostGameReset(roomId);
     }
     broadcastRoom(roomId);
   });

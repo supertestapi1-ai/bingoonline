@@ -1,18 +1,9 @@
-# Bingo Online — V11
+# Bingo Online
 
-ต่อจากระบบเดิม โดยคงระบบเกม/การ์ด/UI หลักไว้ และแก้เฉพาะ flow เล่นรอบต่อไปกับข้อจำกัดจำนวนผู้เล่น
+Version based on v11 with one additional room-lifecycle fix:
 
-- ผู้เล่นต่อห้องกำหนดได้ 10 / 15 / 20 / 30 / 40 / 50 / 60 คน และ Server บังคับไม่ให้เกิน 60 ต่อห้อง
-- ทั้ง Server จำกัดผู้เล่นรวมสูงสุด 80 คน
-- หลังจบเกม ผู้เล่นแต่ละคนเลือก `ใช้บัตรเดิม` หรือ `รับบัตรใหม่` ตามระบบเดิม
-- ถ้าเลือก `รับบัตรใหม่` จะเข้าสู่หน้าการ์ดทันทีและเลือกบัตรใหม่ได้
-- การเลือกบัตรใหม่ถูกส่งสถานะให้ Host เห็นแบบเรียลไทม์
-- เมื่อผู้เล่นพร้อมครบแล้ว Host จะเห็นปุ่ม `🎮 เริ่มรอบใหม่`
-- Host เป็นคนกดเริ่มรอบใหม่ในห้องเดิม ไม่ต้องสร้างห้องใหม่
-- Server จะตรวจอีกครั้งว่าทุกคนเลือกบัตรพร้อมแล้วก่อนเริ่มรอบใหม่
-- ระบบ Bingo / สุ่มเลข / ทำเครื่องหมาย / การ์ด / ห้องเดิม คงหลักการเดิม
-
-## Render
-Root Directory: bingo-online/bingo-online
-Build Command: npm install
-Start Command: npm start
+- After a game ends, if every non-host player disconnects from the browser, the server waits 15 seconds for reconnects.
+- If nobody reconnects during the grace period, old non-host player records are removed, their cards are released, and the **same room** is reset to `lobby`.
+- The Host remains in the same room and can accept a new group of players using the same Room Code.
+- Existing "reuse card / new card" flow for players who remain in the room is unchanged.
+- Existing 60 players per room / 80 players server-wide limits are unchanged.

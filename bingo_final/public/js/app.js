@@ -57,6 +57,7 @@ socket.on('room_state',s=>{state=s;renderAll();if(document.querySelector('#scree
 socket.on('game_started',()=>{isChoosingNewCard=false;toast('เกมเริ่มแล้ว! 🎱','success');screen('screen-game');socket.emit('get_my_card',{},res=>{if(res?.ok&&res.myCard)renderMyCard(res.myCard);});});
 socket.on('number_drawn',info=>{if(state){state.currentNumber=info.number;state.calledNumbers=info.calledNumbers;}renderCurrent();renderCalledHistory();renderNumberBoard();});
 socket.on('host_disconnected',()=>toast('Host หลุดการเชื่อมต่อชั่วคราว','error'));
+socket.on('post_game_reset_pending',info=>{toast(info?.message||'ผู้เล่นชุดเดิมออกจากห้องหมดแล้ว ระบบกำลังเตรียมห้องสำหรับชุดใหม่','success');});
 socket.on('kicked',msg=>{localStorage.removeItem('bingo_playerId');localStorage.removeItem('bingo_roomCode');state=null;me={playerId:null,roomCode:null,isHost:false};$('modal-bingo').classList.add('hidden');screen('screen-home');toast(msg?.message||'คุณถูก Host นำออกจากห้อง','error');});
 socket.on('room_closed',msg=>{localStorage.removeItem('bingo_playerId');localStorage.removeItem('bingo_roomCode');state=null;me={playerId:null,roomCode:null,isHost:false};$('modal-bingo').classList.add('hidden');screen('screen-home');toast(msg?.message||'Host ปิดห้องแล้ว','error');});
 socket.on('bingo',info=>{renderWinners(state);openBingo(info);});
