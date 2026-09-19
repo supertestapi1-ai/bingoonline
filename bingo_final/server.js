@@ -15,7 +15,8 @@ const MAX_SERVER_PLAYERS = 80;
 // refresh/reconnect. If every non-host player has left the browser and stays
 // offline for the full delay, reset the same room back to the lobby so the
 // Host can continue using the same Room Code for a new group of players.
-const POST_GAME_REJOIN_GRACE_MS = 60_000;
+// Disconnected post-game players are kept in the room until they explicitly leave
+// or the Host removes them. They do not block the next-round readiness count.
 const disconnectedPlayerTimers = new Map();
 
 function clearDisconnectedPlayerTimer(playerId) {
@@ -102,26 +103,15 @@ function removeDisconnectedPlayer(playerId) {
 }
 
 function scheduleDisconnectedPlayerCleanup(playerId) {
-  const player = db.getPlayer(playerId);
-  if (!player || player.connected) return;
-  const room = db.getRoom(player.roomId);
-  if (!room || room.gameStatus !== 'ended') return;
-  if (disconnectedPlayerTimers.has(playerId)) return;
-
-  const timer = setTimeout(() => {
-    disconnectedPlayerTimers.delete(playerId);
-    removeDisconnectedPlayer(playerId);
-  }, POST_GAME_REJOIN_GRACE_MS);
-
-  disconnectedPlayerTimers.set(playerId, timer);
+  // Intentionally do not auto-remove disconnected players during the post-game
+  // waiting phase. They may reconnect and choose reuse/new later, or the Host
+  // can remove them manually.
+  return;
 }
 
 function cleanupDisconnectedPlayersAtGameEnd(roomId) {
-  const room = db.getRoom(roomId);
-  if (!room || room.gameStatus !== 'ended') return;
-  db.getPlayersByRoom(roomId)
-    .filter((p) => p.playerId !== room.hostId && !p.connected)
-    .forEach((p) => scheduleDisconnectedPlayerCleanup(p.playerId));
+  // No automatic kick after the game ends. Disconnected players remain visible
+  // to the Host but are excluded from next-round readiness counts.
   maybeResetRoomAfterEveryoneLeaves(roomId);
 }
 
@@ -406,6 +396,16 @@ io.on('connection', (socket) => {
 
     db.updateCard(cardId, { status: 'selected', selectedBy: playerId });
     db.updatePlayer(playerId, { selectedCardId: cardId });
+
+    if (choosingNewAfterGame) {
+      const latest = getPlayAgainStatus(roomId);
+      io.to(roomId).emit('play_again_progress', {
+        chosen: latest.chosen,
+        total: latest.total,
+        allChosen: latest.allChosen,
+        allReady: latest.allReady,
+      });
+    }
 
     cb({ ok: true, card: { cardId: card.cardId, cardNumber: card.cardNumber, numbers: card.numbers }, choosingNewAfterGame });
 
