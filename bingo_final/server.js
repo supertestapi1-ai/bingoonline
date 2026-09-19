@@ -263,11 +263,10 @@ io.on('connection', (socket) => {
 
     cb({ ok: true, card: { cardId: card.cardId, cardNumber: card.cardNumber, numbers: card.numbers }, choosingNewAfterGame });
 
-    if (choosingNewAfterGame) {
-      tryFinalizePlayAgain(roomId);
-    } else {
-      broadcastRoom(roomId);
-    }
+    // While choosing a new card after a game, keep the room in the results
+    // state and broadcast the latest card selection so the Host can see
+    // everyone’s readiness. The Host will explicitly start the next round.
+    broadcastRoom(roomId);
   });
 
   // 5) Release currently selected card (only allowed before game starts)
@@ -436,53 +435,21 @@ io.on('connection', (socket) => {
     cb({ ok: true });
   });
 
-  // 10) Each player chooses how they want to continue after a game ends.
-  // 'reuse' keeps the current card. 'new' releases it immediately and lets that
-  // player pick a new card right away. The round resets only after every player
-  // has chosen AND every player who chose 'new' has selected a new card.
-  function tryFinalizePlayAgain(roomId) {
+  // 10) After a game, each player chooses reuse/new.
+  // The room stays on the results screen until the Host explicitly starts
+  // the next round. A player choosing "new" can select a replacement card
+  // immediately while the game is still in the "ended" state.
+  function getPlayAgainStatus(roomId) {
     const room = db.getRoom(roomId);
-    if (!room || room.gameStatus !== 'ended') return false;
-
-    const players = db.getPlayersByRoom(roomId).filter((p) => p.playerId !== room.hostId);
-    if (players.length === 0) return false;
-
-    const choices = room.playAgainChoices || {};
-    const allChosen = players.every((p) => choices[p.playerId] === 'new' || choices[p.playerId] === 'reuse');
-    if (!allChosen) return false;
-
-    const allNewCardsReady = players.every((p) => choices[p.playerId] !== 'new' || !!p.selectedCardId);
-    if (!allNewCardsReady) return false;
-
-    const cards = db.getCardsByRoom(roomId);
-    const kept = new Set();
-
-    for (const p of players) {
-      const choice = choices[p.playerId];
-      if (choice === 'reuse' && p.selectedCardId) {
-        kept.add(p.selectedCardId);
-        db.updateCard(p.selectedCardId, { status: 'selected', selectedBy: p.playerId });
-      }
-      db.updatePlayer(p.playerId, { markedNumbers: [] });
+    if (!room || room.gameStatus !== 'ended') {
+      return { ok: false, chosen: 0, total: 0, allChosen: false, allReady: false };
     }
-
-    // Release any card that is not currently kept by a player.
-    cards.forEach((c) => {
-      if (!kept.has(c.cardId) && !players.some((p) => p.selectedCardId === c.cardId)) {
-        db.updateCard(c.cardId, { status: 'available', selectedBy: null });
-      }
-    });
-
-    db.updateRoom(roomId, {
-      gameStatus: 'lobby',
-      currentNumber: null,
-      calledNumbers: [],
-      winners: [],
-      playAgainChoices: {},
-    });
-    io.to(roomId).emit('game_reset', { message: 'ผู้เล่นเลือกการ์ดรอบใหม่ครบแล้ว' });
-    broadcastRoom(roomId);
-    return true;
+    const players = db.getPlayersByRoom(roomId).filter((p) => p.playerId !== room.hostId);
+    const choices = room.playAgainChoices || {};
+    const chosen = players.filter((p) => choices[p.playerId] === 'new' || choices[p.playerId] === 'reuse').length;
+    const allChosen = players.length > 0 && chosen === players.length;
+    const allReady = allChosen && players.every((p) => !!p.selectedCardId);
+    return { ok: true, chosen, total: players.length, allChosen, allReady };
   }
 
   socket.on('play_again_choice', ({ choice }, cb = () => {}) => {
@@ -496,16 +463,21 @@ io.on('connection', (socket) => {
     const player = db.getPlayer(playerId);
     if (!player || player.roomId !== roomId) return cb({ ok: false, error: 'ไม่พบผู้เล่นในห้อง' });
 
+    // Do not allow a player to make a second choice in the same round.
+    if ((room.playAgainChoices || {})[playerId]) {
+      return cb({ ok: false, error: 'คุณเลือกสำหรับรอบใหม่ไปแล้ว' });
+    }
+
     const choices = { ...(room.playAgainChoices || {}), [playerId]: choice };
 
     if (choice === 'new') {
-      // Release the old card NOW so the player can immediately choose another one.
+      // Release the old card immediately and require a new one.
       if (player.selectedCardId) {
         db.updateCard(player.selectedCardId, { status: 'available', selectedBy: null });
       }
       db.updatePlayer(playerId, { selectedCardId: null, markedNumbers: [] });
     } else {
-      // Keep the card, but clear marks for the next round.
+      // Keep the old card and clear its marks for the next round.
       db.updatePlayer(playerId, { markedNumbers: [] });
       if (player.selectedCardId) {
         db.updateCard(player.selectedCardId, { status: 'selected', selectedBy: playerId });
@@ -514,16 +486,12 @@ io.on('connection', (socket) => {
 
     db.updateRoom(roomId, { playAgainChoices: choices });
 
-    const players = db.getPlayersByRoom(roomId).filter((p) => p.playerId !== room.hostId);
-    const chosen = players.filter((p) => choices[p.playerId]).length;
-    const allChosen = players.length > 0 && players.every((p) => choices[p.playerId]);
-    const allNewCardsReady = allChosen && players.every((p) => choices[p.playerId] !== 'new' || !!p.selectedCardId);
-
+    const status = getPlayAgainStatus(roomId);
     cb({
       ok: true,
       choice,
-      allChosen,
-      allReady: allNewCardsReady,
+      allChosen: status.allChosen,
+      allReady: status.allReady,
       needsCardSelection: choice === 'new',
     });
 
@@ -532,12 +500,58 @@ io.on('connection', (socket) => {
     }
 
     io.to(roomId).emit('play_again_progress', {
-      chosen,
-      total: players.length,
+      chosen: status.chosen,
+      total: status.total,
+      allChosen: status.allChosen,
+      allReady: status.allReady,
+    });
+    broadcastRoom(roomId);
+  });
+
+  // Host explicitly starts the next round once every player has chosen
+  // reuse/new and every player has a valid selected card.
+  socket.on('start_next_round', (_payload, cb = () => {}) => {
+    const { roomId, playerId } = socket.data;
+    const room = db.getRoom(roomId);
+    if (!room || room.hostId !== playerId) {
+      return cb({ ok: false, error: 'เฉพาะ Host เท่านั้นที่เริ่มรอบใหม่ได้' });
+    }
+    const status = getPlayAgainStatus(roomId);
+    if (!status.allChosen) {
+      return cb({ ok: false, error: `ยังมีผู้เล่นที่ยังไม่ได้เลือกว่าจะใช้บัตรเดิมหรือรับบัตรใหม่ (${status.chosen}/${status.total})` });
+    }
+    if (!status.allReady) {
+      return cb({ ok: false, error: 'ยังมีผู้เล่นที่ยังไม่ได้เลือกบัตรใหม่' });
+    }
+
+    const players = db.getPlayersByRoom(roomId).filter((p) => p.playerId !== room.hostId);
+    const choices = room.playAgainChoices || {};
+
+    // Keep every selected card locked and clear marks before the new round.
+    players.forEach((p) => {
+      db.updatePlayer(p.playerId, { markedNumbers: [] });
+      if (p.selectedCardId) {
+        db.updateCard(p.selectedCardId, { status: 'selected', selectedBy: p.playerId });
+      }
     });
 
-    tryFinalizePlayAgain(roomId);
-    if (db.getRoom(roomId)?.gameStatus === 'ended') broadcastRoom(roomId);
+    // Any card not selected by a player is available for future selection.
+    const kept = new Set(players.map((p) => p.selectedCardId).filter(Boolean));
+    db.getCardsByRoom(roomId).forEach((c) => {
+      if (!kept.has(c.cardId)) db.updateCard(c.cardId, { status: 'available', selectedBy: null });
+    });
+
+    db.updateRoom(roomId, {
+      gameStatus: 'playing',
+      currentNumber: null,
+      calledNumbers: [],
+      winners: [],
+      playAgainChoices: {},
+    });
+
+    io.to(roomId).emit('game_started');
+    broadcastRoom(roomId);
+    cb({ ok: true });
   });
 
   // Fetch my own card explicitly (used right after reconnect / card select)
