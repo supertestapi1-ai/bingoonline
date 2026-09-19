@@ -92,7 +92,7 @@ function renderAll(){
  const mine=state.players.find(p=>p.playerId===me.playerId);$('lobby-my-status').innerHTML=me.isHost?'👑 คุณคือ Host — ไม่ต้องเลือกบัตร':mine?.selectedCardId?`✅ บัตรของคุณ <strong>#${pad(getCardNumber(mine.selectedCardId))}</strong> พร้อมเล่น`:'🎟️ คุณยังไม่ได้เลือกบัตร';
  if(state.gameStatus==='lobby'){if(document.querySelector('#screen-game.active'))screen('screen-lobby');}
  else if(state.gameStatus==='playing'){screen('screen-game');socket.emit('get_my_card',{},res=>{if(res?.ok&&res.myCard)renderMyCard(res.myCard);});}
- else if(state.gameStatus==='ended'){if(isChoosingNewCard){renderCardGrid();screen('screen-pick');}else{screen('screen-results');}renderNextRoundControls();}
+ else if(state.gameStatus==='ended'){renderResults(state.winners||[]);if(isChoosingNewCard){renderCardGrid();screen('screen-pick');}else{screen('screen-results');}renderNextRoundControls();}
 }
 function getMeName(){return state?.players.find(p=>p.playerId===me.playerId)?.playerName||'Player';}
 function getCardNumber(id){return state?.cards.find(c=>c.cardId===id)?.cardNumber||'?';}
@@ -102,9 +102,10 @@ function getNextRoundStatus(){
  const players=(state?.players||[]).filter(p=>!p.isHost && p.connected);
  const choices=state?.playAgainChoices||{};
  const chosen=players.filter(p=>choices[p.playerId]==='new'||choices[p.playerId]==='reuse').length;
- const allChosen=players.length>0&&chosen===players.length;
+ const hasPlayers=players.length>0;
+ const allChosen=hasPlayers&&chosen===players.length;
  const allReady=allChosen&&players.every(p=>!!p.selectedCardId);
- return {players,chosen,total:players.length,allChosen,allReady};
+ return {players,chosen,total:players.length,hasPlayers,allChosen,allReady};
 }
 function renderLobbyPlayers(){
  const list=$('lobby-player-list');
@@ -154,10 +155,16 @@ function renderNextRoundControls(){
  box.classList.toggle('hidden',!show);
  if(!show)return;
  const s=getNextRoundStatus();
- if(!s.allChosen){
+ if(!s.hasPlayers){
+   statusEl.textContent='✅ ผู้เล่นชุดเดิมออกจากห้องหมดแล้ว • พร้อมรอผู้เล่นใหม่';
+   btn.disabled=false;
+   btn.textContent='🏠 เปิดรอผู้เล่นชุดใหม่';
+   btn.dataset.mode='reset';
+ }else if(!s.allChosen){
    statusEl.textContent=`⏳ รอผู้เล่นเลือกว่าจะใช้บัตรเดิม/รับบัตรใหม่ ${s.chosen}/${s.total} คน`;
    btn.disabled=true;
    btn.textContent='⏳ รอการเลือกของผู้เล่น';
+   btn.dataset.mode='next';
  }else if(!s.allReady){
    const ready=s.players.filter(p=>!!p.selectedCardId).length;
    statusEl.textContent=`🎟️ ผู้เล่นเลือกบัตรแล้ว ${ready}/${s.total} คน`;
@@ -167,6 +174,7 @@ function renderNextRoundControls(){
    statusEl.textContent=`✅ ทุกคนพร้อมแล้ว ${s.total}/${s.total} คน`;
    btn.disabled=false;
    btn.textContent='🎮 เริ่มรอบใหม่';
+   btn.dataset.mode='next';
  }
 }
 
@@ -177,10 +185,14 @@ function renderResults(ws){const list=$('results-list');list.innerHTML=ws.length
 }
 
 function leaveRoom(){if(!me.roomCode)return;const host=me.isHost;const ok=confirm(host?'ออกจากห้องในฐานะ Host? ห้องจะถูกปิดและผู้เล่นทั้งหมดจะออกด้วย':'ต้องการออกจากห้องนี้ใช่ไหม?');if(!ok)return;socket.emit('leave_room',{},res=>{if(!res?.ok)return toast(res?.error||'ออกจากห้องไม่สำเร็จ','error');localStorage.removeItem('bingo_playerId');localStorage.removeItem('bingo_roomCode');state=null;me={playerId:null,roomCode:null,isHost:false};$('modal-bingo').classList.add('hidden');screen('screen-home');toast('ออกจากห้องแล้ว','success');});}
-$('btn-leave-lobby').onclick=leaveRoom;$('btn-leave-game').onclick=leaveRoom;
+$('btn-leave-lobby').onclick=leaveRoom;$('btn-leave-game').onclick=leaveRoom;$('btn-leave-results').onclick=leaveRoom;
 $('btn-draw-number').onclick=()=>socket.emit('draw_number',{},res=>{if(!res?.ok)toast(res.error,'error');});
 $('btn-end-game').onclick=()=>{if(confirm('ต้องการจบเกมตอนนี้ใช่ไหม?'))socket.emit('end_game',{},res=>{if(!res?.ok)toast(res.error,'error');});};
 function choosePlayAgain(choice){socket.emit('play_again_choice',{choice},res=>{if(!res?.ok)return toast(res.error,'error'); if($('play-again-status'))$('play-again-status').textContent=`เลือกแล้ว: ${choice==='new'?'🎟️ รับบัตรใหม่':'♻️ ใช้บัตรเดิม'} — รอ Host เริ่มรอบใหม่…`;});}
 $('btn-new-card').onclick=()=>choosePlayAgain('new');
 $('btn-reuse-card').onclick=()=>choosePlayAgain('reuse');
-$('btn-host-next-round').onclick=()=>{socket.emit('start_next_round',{},res=>{if(!res?.ok)toast(res.error,'error');});};
+$('btn-host-next-round').onclick=()=>{
+ const mode=$('btn-host-next-round').dataset.mode||'next';
+ const event=mode==='reset'?'host_reset_room':'start_next_round';
+ socket.emit(event,{},res=>{if(!res?.ok)toast(res.error,'error');});
+};

@@ -527,8 +527,21 @@ io.on('connection', (socket) => {
     socket.leave(roomId);
     socket.data.roomId = null;
     socket.data.playerId = null;
-    if (room.gameStatus === 'ended') schedulePostGameReset(roomId);
-    broadcastRoom(roomId);
+
+    if (room.gameStatus === 'ended') {
+      // An explicit "ออกจากห้อง" means the player really left, so when the
+      // last old player leaves we can immediately turn the same room back
+      // into a lobby. Browser-close/disconnect still keeps the 15s grace.
+      const remainingOnline = db.getPlayersByRoom(roomId)
+        .filter((p) => p.playerId !== room.hostId && p.connected);
+      if (remainingOnline.length === 0) {
+        resetRoomAfterEveryoneLeaves(roomId);
+      } else {
+        broadcastRoom(roomId);
+      }
+    } else {
+      broadcastRoom(roomId);
+    }
     cb({ ok: true });
   });
 
@@ -603,6 +616,29 @@ io.on('connection', (socket) => {
       allReady: status.allReady,
     });
     broadcastRoom(roomId);
+  });
+
+  // Host can manually open the same Room Code for a brand-new group once
+  // all old non-host players have left. This prevents the Host from being
+  // stuck on the results screen waiting forever.
+  socket.on('host_reset_room', (_payload, cb = () => {}) => {
+    const { roomId, playerId } = socket.data;
+    const room = db.getRoom(roomId);
+    if (!room || room.hostId !== playerId) {
+      return cb({ ok: false, error: 'เฉพาะ Host เท่านั้น' });
+    }
+    if (room.gameStatus !== 'ended') {
+      return cb({ ok: false, error: 'ห้องไม่ได้อยู่ในช่วงจบเกม' });
+    }
+
+    const onlineNonHosts = db.getPlayersByRoom(roomId)
+      .filter((p) => p.playerId !== room.hostId && p.connected);
+    if (onlineNonHosts.length > 0) {
+      return cb({ ok: false, error: `ยังมีผู้เล่นเก่าอยู่ในห้อง ${onlineNonHosts.length} คน` });
+    }
+
+    resetRoomAfterEveryoneLeaves(roomId);
+    cb({ ok: true });
   });
 
   // Host explicitly starts the next round once every player has chosen

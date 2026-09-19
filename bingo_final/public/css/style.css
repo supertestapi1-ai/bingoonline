@@ -24,3 +24,8 @@
 @keyframes markedPulse{0%,100%{box-shadow:0 0 0 2px #ff6b71,0 0 6px #ff6b7130,inset 0 -4px 0 #bd2939}50%{box-shadow:0 0 0 3px #ff9aa0,0 0 18px #ff596580,inset 0 -4px 0 #bd2939}}
 @media(max-width:650px){.lobby-actions{max-width:520px}.host-main-board{padding:13px;border-radius:20px}.number-board-large{grid-template-columns:repeat(6,minmax(0,1fr));gap:6px}.number-board-large .number-dot{font-size:.78rem}.play-again-choice{grid-template-columns:1fr}.game-layout main{width:100%;overflow:hidden}.draw-center{max-width:100%;flex-wrap:wrap;justify-content:center}.draw-card{overflow:hidden}.called-history{width:100%}}
 @media(max-width:380px){.number-board-large{grid-template-columns:repeat(5,minmax(0,1fr))}.number-board-large .number-dot{font-size:.72rem}.player-grid .cell{font-size:.84rem}}
+
+
+/* Post-game actions */
+.results-actions{display:flex;justify-content:center;margin-top:14px}
+.results-actions .btn{min-width:190px}

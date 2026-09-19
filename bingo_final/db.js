@@ -66,7 +66,9 @@ module.exports = {
     return [...players.values()].filter((p) => p.roomId === roomId);
   },
   getPlayerCount() {
-    return players.size;
+    // Only currently connected players consume the server-wide 80-player cap.
+    // Disconnected browser sessions remain temporarily for reconnect grace.
+    return [...players.values()].filter((p) => p.connected).length;
   },
 
   // ---- cards ----
