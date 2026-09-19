@@ -541,7 +541,7 @@ io.on('connection', (socket) => {
     if (!room || room.gameStatus !== 'ended') {
       return { ok: false, chosen: 0, total: 0, allChosen: false, allReady: false };
     }
-    const players = db.getPlayersByRoom(roomId).filter((p) => p.playerId !== room.hostId);
+    const players = db.getPlayersByRoom(roomId).filter((p) => p.playerId !== room.hostId && p.connected);
     const choices = room.playAgainChoices || {};
     const chosen = players.filter((p) => choices[p.playerId] === 'new' || choices[p.playerId] === 'reuse').length;
     const allChosen = players.length > 0 && chosen === players.length;
@@ -621,7 +621,7 @@ io.on('connection', (socket) => {
       return cb({ ok: false, error: 'ยังมีผู้เล่นที่ยังไม่ได้เลือกบัตรใหม่' });
     }
 
-    const players = db.getPlayersByRoom(roomId).filter((p) => p.playerId !== room.hostId);
+    const players = db.getPlayersByRoom(roomId).filter((p) => p.playerId !== room.hostId && p.connected);
     const choices = room.playAgainChoices || {};
 
     // Keep every selected card locked and clear marks before the new round.
