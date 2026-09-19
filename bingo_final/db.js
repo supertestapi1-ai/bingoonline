@@ -65,6 +65,9 @@ module.exports = {
   getPlayersByRoom(roomId) {
     return [...players.values()].filter((p) => p.roomId === roomId);
   },
+  getAllPlayers() {
+    return [...players.values()];
+  },
 
   // ---- cards ----
   createCard(c) {

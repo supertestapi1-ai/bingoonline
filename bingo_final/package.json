@@ -1,7 +1,7 @@
 {
   "name": "bingo-online",
   "version": "1.0.0",
-  "description": "Real-time online Bingo game (host + up to 19 players) with Socket.IO",
+  "description": "Real-time online Bingo game with Socket.IO (up to 60 players per room, 80 players server-wide)",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

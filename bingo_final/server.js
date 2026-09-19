@@ -15,6 +15,11 @@ const io = new Server(server, { cors: { origin: '*' } });
 app.use(express.static(path.join(__dirname, 'public')));
 
 const PORT = process.env.PORT || 3000;
+const MAX_SERVER_PLAYERS = 80;
+
+function getServerPlayerCount() {
+  return db.getAllPlayers().length;
+}
 
 // ---------- helpers ----------
 
@@ -54,7 +59,8 @@ function roomStatePayload(room) {
     calledNumbers: room.calledNumbers,
     winners: room.winners,
     playAgainChoices: room.playAgainChoices || {},
-    roundSetup: !!room.roundSetup,
+    serverPlayerCount: getServerPlayerCount(),
+    serverPlayerLimit: MAX_SERVER_PLAYERS,
     players,
     cards,
   };
@@ -89,12 +95,17 @@ io.on('connection', (socket) => {
       if (!cleanHostName) return cb({ ok: false, error: 'กรุณากรอกชื่อ Host ก่อนสร้างห้อง' });
       if (cleanHostName.length > 20) return cb({ ok: false, error: 'ชื่อยาวเกิน 20 ตัวอักษร' });
       const cardCount = [20, 30, 50, 100].includes(config.cardCount) ? config.cardCount : 30;
-      const maxPlayers = [10, 15, 20].includes(config.maxPlayers) ? config.maxPlayers : 20;
+      const maxPlayersOptions = [10, 15, 20, 30, 40, 50, 60];
+      const maxPlayers = maxPlayersOptions.includes(Number(config.maxPlayers)) ? Number(config.maxPlayers) : 20;
       const numberMin = Number.isFinite(Number(config.numberMin)) ? Number(config.numberMin) : 1;
       const numberMax = Number.isFinite(Number(config.numberMax)) ? Number(config.numberMax) : 75;
 
       if (!Number.isInteger(numberMin) || !Number.isInteger(numberMax) || numberMin < 1 || numberMax < numberMin || numberMax > 999 || numberMax - numberMin + 1 < 25) {
         return cb({ ok: false, error: 'ช่วงเลขต้องมีอย่างน้อย 25 ค่า' });
+      }
+
+      if (getServerPlayerCount() >= MAX_SERVER_PLAYERS) {
+        return cb({ ok: false, error: `ผู้เล่นทั้ง Server ครบ ${MAX_SERVER_PLAYERS} คนแล้ว กรุณารอให้มีคนออกก่อน` });
       }
 
       const roomId = nanoid(10);
@@ -115,7 +126,6 @@ io.on('connection', (socket) => {
         calledNumbers: [],
         winners: [],
         playAgainChoices: {},
-        roundSetup: false,
         createdAt: Date.now(),
       };
       db.createRoom(room);
@@ -165,7 +175,10 @@ io.on('connection', (socket) => {
     if (!room) return cb({ ok: false, error: 'ไม่พบห้องนี้ ตรวจสอบ Room Code อีกครั้ง' });
 
     const existing = db.getPlayersByRoom(room.roomId);
-    if (existing.length >= room.maxPlayers) return cb({ ok: false, error: 'ห้องเต็มแล้ว' });
+    if (existing.length >= room.maxPlayers) return cb({ ok: false, error: `ห้องเต็มแล้ว (${room.maxPlayers} คน)` });
+    if (getServerPlayerCount() >= MAX_SERVER_PLAYERS) {
+      return cb({ ok: false, error: `ผู้เล่นทั้ง Server ครบ ${MAX_SERVER_PLAYERS} คนแล้ว กรุณารอให้มีคนออกก่อน` });
+    }
     if (room.gameStatus !== 'lobby') return cb({ ok: false, error: 'เกมเริ่มไปแล้ว ไม่สามารถเข้าร่วมได้' });
 
     const playerId = nanoid(8);
@@ -278,21 +291,12 @@ io.on('connection', (socket) => {
 
     const players = db.getPlayersByRoom(roomId).filter((p) => p.playerId !== room.hostId);
     if (players.length === 0) return cb({ ok: false, error: 'ต้องมีผู้เล่นอย่างน้อย 1 คนก่อนเริ่มเกม' });
-
-    const choices = room.playAgainChoices || {};
-    if (room.roundSetup) {
-      const unchosen = players.filter((p) => !choices[p.playerId]);
-      if (unchosen.length > 0) {
-        return cb({ ok: false, error: `ยังมีผู้เล่น ${unchosen.length} คนที่ยังไม่ได้เลือกบัตรรอบใหม่` });
-      }
-    }
-
     const notReady = players.filter((p) => !p.selectedCardId);
     if (notReady.length > 0) {
       return cb({ ok: false, error: `ยังมีผู้เล่น ${notReady.length} คนที่ยังไม่ได้เลือกบัตร` });
     }
 
-    db.updateRoom(roomId, { gameStatus: 'playing', roundSetup: false, currentNumber: null, calledNumbers: [], winners: [], playAgainChoices: {} });
+    db.updateRoom(roomId, { gameStatus: 'playing', currentNumber: null, calledNumbers: [], winners: [], playAgainChoices: {} });
     io.to(roomId).emit('game_started');
     broadcastRoom(roomId);
     cb({ ok: true });
@@ -373,14 +377,8 @@ io.on('connection', (socket) => {
     const room = db.getRoom(roomId);
     if (!room || room.hostId !== playerId) return cb({ ok: false, error: 'เฉพาะ Host เท่านั้น' });
 
-    db.updateRoom(roomId, {
-      gameStatus: 'lobby',
-      roundSetup: true,
-      currentNumber: null,
-      calledNumbers: [],
-      playAgainChoices: {},
-    });
-    io.to(roomId).emit('game_ended', { winners: room.winners, nextRound: true });
+    db.updateRoom(roomId, { gameStatus: 'ended' });
+    io.to(roomId).emit('game_ended', { winners: room.winners });
     broadcastRoom(roomId);
     cb({ ok: true });
   });
@@ -395,6 +393,8 @@ io.on('connection', (socket) => {
     const target = db.getPlayer(targetPlayerId);
     if (!target || target.roomId !== roomId) return cb({ ok: false, error: 'ไม่พบผู้เล่นคนนี้ในห้อง' });
     if (target.selectedCardId) db.updateCard(target.selectedCardId, { status: 'available', selectedBy: null });
+    // A kicked player is fully removed from the room/session.
+    db.updatePlayer(targetPlayerId, { selectedCardId: null, markedNumbers: [], socketId: null, connected: false });
     const targetSocket = target.socketId ? io.sockets.sockets.get(target.socketId) : null;
     if (targetSocket) {
       targetSocket.emit('kicked', { message: 'Host นำคุณออกจากห้องแล้ว' });
@@ -423,10 +423,16 @@ io.on('connection', (socket) => {
     }
 
     const player = db.getPlayer(playerId);
-    if (player && player.selectedCardId) {
-      db.updateCard(player.selectedCardId, { status: 'available', selectedBy: null });
+    if (player) {
+      if (player.selectedCardId) {
+        db.updateCard(player.selectedCardId, { status: 'available', selectedBy: null });
+      }
+      // A true leave destroys this player's session completely.
+      // If the same browser later joins again, the server creates a brand-new
+      // playerId with no selected card, so the old card cannot follow them.
+      db.updatePlayer(playerId, { selectedCardId: null, markedNumbers: [], socketId: null, connected: false });
+      db.deletePlayer(playerId);
     }
-    db.deletePlayer(playerId);
     socket.leave(roomId);
     socket.data.roomId = null;
     socket.data.playerId = null;
@@ -434,14 +440,14 @@ io.on('connection', (socket) => {
     cb({ ok: true });
   });
 
-  // 10) Each player chooses how they want to continue for the next round.
-  // The room stays in lobby while players make their own choice. The Host starts
-  // the next round only after everyone has chosen and everyone has a card.
+  // 10) Each player chooses how they want to continue after a game ends.
+  // 'reuse' keeps the current card; 'new' releases it. Once every player has chosen,
+  // the room automatically returns to lobby. The Host does not need to choose.
   socket.on('play_again_choice', ({ choice }, cb = () => {}) => {
     const { roomId, playerId } = socket.data;
     const room = db.getRoom(roomId);
     if (!room) return cb({ ok: false, error: 'ไม่พบห้อง' });
-    if (room.gameStatus !== 'lobby' || !room.roundSetup) return cb({ ok: false, error: 'ยังไม่อยู่ในช่วงเลือกบัตรรอบใหม่' });
+    if (room.gameStatus !== 'ended') return cb({ ok: false, error: 'ยังไม่อยู่ในช่วงเลือกบัตรรอบใหม่' });
     if (playerId === room.hostId) return cb({ ok: false, error: 'Host ไม่ต้องเลือกบัตร' });
     if (!['new', 'reuse'].includes(choice)) return cb({ ok: false, error: 'ตัวเลือกไม่ถูกต้อง' });
 
@@ -449,27 +455,39 @@ io.on('connection', (socket) => {
     if (!player || player.roomId !== roomId) return cb({ ok: false, error: 'ไม่พบผู้เล่นในห้อง' });
 
     const choices = { ...(room.playAgainChoices || {}), [playerId]: choice };
-    if (choice === 'new') {
-      if (player.selectedCardId) {
-        const oldCard = db.getCard(player.selectedCardId);
-        if (oldCard) db.updateCard(oldCard.cardId, { status: 'available', selectedBy: null });
+    db.updateRoom(roomId, { playAgainChoices: choices });
+
+    const players = db.getPlayersByRoom(roomId).filter((p) => p.playerId !== room.hostId);
+    const allChosen = players.length > 0 && players.every((p) => choices[p.playerId]);
+
+    if (allChosen) {
+      const cards = db.getCardsByRoom(roomId);
+      for (const p of players) {
+        const selected = p.selectedCardId ? db.getCard(p.selectedCardId) : null;
+        if (choices[p.playerId] === 'new') {
+          if (selected) db.updateCard(selected.cardId, { status: 'available', selectedBy: null });
+          db.updatePlayer(p.playerId, { selectedCardId: null, markedNumbers: [] });
+        } else {
+          if (selected) db.updateCard(selected.cardId, { status: 'selected', selectedBy: p.playerId });
+          db.updatePlayer(p.playerId, { markedNumbers: [] });
+        }
       }
-      db.updatePlayer(playerId, { selectedCardId: null, markedNumbers: [] });
+
+      // Any card that was not kept by a player becomes available.
+      const kept = new Set(players.filter((p) => choices[p.playerId] === 'reuse' && p.selectedCardId).map((p) => p.selectedCardId));
+      cards.forEach((c) => {
+        if (!kept.has(c.cardId)) db.updateCard(c.cardId, { status: 'available', selectedBy: null });
+      });
+
+      db.updateRoom(roomId, { gameStatus: 'lobby', currentNumber: null, calledNumbers: [], winners: [], playAgainChoices: {} });
+      io.to(roomId).emit('game_reset', { message: 'ผู้เล่นเลือกการ์ดรอบใหม่ครบแล้ว' });
     } else {
-      // Reuse the same card, but clear marks for the new round.
-      if (player.selectedCardId) {
-        const card = db.getCard(player.selectedCardId);
-        if (card) db.updateCard(card.cardId, { status: 'selected', selectedBy: playerId });
-      }
-      db.updatePlayer(playerId, { markedNumbers: [] });
+      io.to(roomId).emit('play_again_progress', {
+        chosen: players.filter((p) => choices[p.playerId]).length,
+        total: players.length,
+      });
     }
 
-    db.updateRoom(roomId, { playAgainChoices: choices });
-    const players = db.getPlayersByRoom(roomId).filter((p) => p.playerId !== room.hostId);
-    const chosen = players.filter((p) => choices[p.playerId]).length;
-    const allChosen = players.length > 0 && chosen === players.length;
-
-    io.to(roomId).emit('play_again_progress', { chosen, total: players.length });
     cb({ ok: true, choice, allChosen });
     broadcastRoom(roomId);
   });

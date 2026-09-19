@@ -36,7 +36,7 @@
     <div class="required-note">ชื่อจำเป็นต้องกรอกก่อนสร้างห้อง</div>
     <div class="form-grid-2">
       <div><label>จำนวนบัตร</label><div class="chips" id="chip-cardcount"><button class="chip" data-value="20">20</button><button class="chip active" data-value="30">30</button><button class="chip" data-value="50">50</button><button class="chip" data-value="100">100</button></div></div>
-      <div><label>ผู้เล่นสูงสุด</label><div class="chips" id="chip-maxplayers"><button class="chip" data-value="10">10</button><button class="chip" data-value="15">15</button><button class="chip active" data-value="20">20</button></div></div>
+      <div><label>ผู้เล่นสูงสุด</label><div class="chips" id="chip-maxplayers"><button class="chip" data-value="10">10</button><button class="chip active" data-value="20">20</button><button class="chip" data-value="30">30</button><button class="chip" data-value="40">40</button><button class="chip" data-value="50">50</button><button class="chip" data-value="60">60</button></div></div>
     </div>
     <label>ชุดเลขในเกม</label>
     <div class="range-cards" id="chip-range">
@@ -64,18 +64,9 @@
 <section id="screen-lobby" class="screen">
   <div class="page-shell">
     <header class="topbar"><div class="room-badge"><span>🎱</span><b id="lobby-room-code">BGO-0000</b></div><div class="top-actions"><span id="lobby-host-banner" class="warning hidden">⚠️ Host หลุด</span><button class="btn btn-exit" id="btn-leave-lobby">🚪 ออกจากห้อง</button></div></header>
-    <div class="lobby-hero"><div><div class="eyebrow">GAME LOBBY</div><h2>พร้อมหรือยัง?</h2><p id="lobby-config">75 เลข • 30 บัตร • สูงสุด 20 คน</p></div><div class="host-pill" id="lobby-role">👑 Host</div></div>
+    <div class="lobby-hero"><div><div class="eyebrow">GAME LOBBY</div><h2>พร้อมหรือยัง?</h2><p id="lobby-config">75 เลข • 30 บัตร • สูงสุด 60 คน</p></div><div class="host-pill" id="lobby-role">👑 Host</div></div>
     <div class="stats"><div><b id="stat-players">0/20</b><span>ผู้เล่น</span></div><div><b id="stat-cards">0/30</b><span>บัตรถูกเลือก</span></div><div><b id="stat-range">75</b><span>เลขในเกม</span></div></div>
     <div id="lobby-my-status" class="selection-status">ยังไม่ได้เลือกบัตร</div>
-    <div id="round-choice-panel" class="round-choice-panel hidden">
-      <div class="round-choice-title">🎉 เตรียมตัวสำหรับรอบใหม่</div>
-      <p>รอบนี้เลือกเองได้เลยว่าจะใช้บัตรเดิม หรือรับบัตรใหม่</p>
-      <div class="round-choice-actions">
-        <button class="btn btn-secondary btn-lg" id="btn-reuse-card-lobby">♻️ ใช้บัตรเดิม</button>
-        <button class="btn btn-primary btn-lg" id="btn-new-card-lobby">🎟️ รับบัตรใหม่</button>
-      </div>
-      <div id="round-choice-status" class="selection-status">ยังไม่ได้เลือกสำหรับรอบถัดไป</div>
-    </div>
     <div class="lobby-actions"><button class="btn btn-secondary btn-lg" id="btn-go-pick-card">🎟️ เลือกบัตร Bingo</button><button class="btn btn-success btn-lg hidden" id="btn-start-game">🎮 เริ่มเกม</button></div>
     <p id="host-start-hint" class="hint hidden">เลือกบัตรให้เรียบร้อย แล้วกดเริ่มเกมเมื่อทุกคนพร้อม</p>
     <div class="players-panel"><div class="panel-head"><div><span class="eyebrow">PLAYERS</span><h3>คนในห้อง</h3></div><span id="player-online-count">0 คน</span></div><div id="lobby-player-list" class="player-list"></div><p id="host-kick-hint" class="hint center hidden">👑 Host สามารถกด “เตะ” เพื่อนออกจากห้องได้ก่อนเริ่มเกม</p></div>
