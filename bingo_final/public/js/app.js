@@ -71,7 +71,7 @@ socket.on('play_again_progress',info=>{
 
 function renderAll(){
  if(!state)return;config={...config,...state.config};me.isHost=state.hostId===me.playerId;
- $('lobby-room-code').textContent=state.roomCode;$('game-room-code').textContent=state.roomCode;$('game-player-name').textContent=me.isHost?'👑 Host':getMeName();
+ $('lobby-room-code').textContent=state.roomCode;$('game-room-code').textContent=state.roomCode;if($('results-room-code'))$('results-room-code').textContent=state.roomCode;$('game-player-name').textContent=me.isHost?'👑 Host':getMeName();
  const total=state.config.numberMax-state.config.numberMin+1, selected=state.cards.filter(c=>c.status==='selected').length;
  $('stat-players').textContent=`${state.players.length}/${state.config.maxPlayers}`;$('stat-cards').textContent=`${selected}/${state.cards.length}`;$('stat-range').textContent=total;
  $('lobby-config').textContent=`🎱 ${state.config.numberMin}–${state.config.numberMax} • ${state.cards.length} บัตร • สูงสุด ${state.config.maxPlayers} คน`;
@@ -180,7 +180,15 @@ function renderNextRoundControls(){
 
 function renderResults(ws){const list=$('results-list');list.innerHTML=ws.length?ws.map((w,i)=>`<div class="result-row"><b>${i+1}. ${esc(w.playerName)}</b><span>บัตร #${pad(w.cardNumber)}</span></div>`).join(''):'<div class="empty">ยังไม่มีผู้ชนะ</div>';
  const showChoices=!me.isHost; $('play-again-options').classList.toggle('hidden',!showChoices); $('results-wait-hint').classList.toggle('hidden',showChoices);
- if(showChoices && !isChoosingNewCard){ const mine=state?.playAgainChoices?.[me.playerId]; $('play-again-status').textContent=mine?`เลือกแล้ว: ${mine==='new'?'🎟️ รับบัตรใหม่':'♻️ ใช้บัตรเดิม'} — รอ Host เริ่มรอบใหม่…`:'ยังไม่ได้เลือกสำหรับรอบถัดไป'; $('btn-new-card').disabled=!!mine; $('btn-reuse-card').disabled=!!mine; }
+ if(showChoices && !isChoosingNewCard){
+   const mePlayer=state?.players?.find(p=>p.playerId===me.playerId);
+   const mine=state?.playAgainChoices?.[me.playerId];
+   const isNewPlayer=!mePlayer?.selectedCardId;
+   $('play-again-status').textContent=mine?`เลือกแล้ว: ${mine==='new'?'🎟️ รับบัตรใหม่':'♻️ ใช้บัตรเดิม'} — รอ Host เริ่มรอบใหม่…`:isNewPlayer?'ผู้เล่นใหม่ — กรุณารับบัตรใหม่เพื่อเข้ารอบถัดไป':'ยังไม่ได้เลือกสำหรับรอบถัดไป';
+   $('btn-new-card').disabled=!!mine;
+   $('btn-reuse-card').disabled=!!mine || isNewPlayer;
+   $('btn-reuse-card').classList.toggle('hidden',isNewPlayer);
+ }
  renderNextRoundControls();
 }
 

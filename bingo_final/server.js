@@ -259,9 +259,20 @@ io.on('connection', (socket) => {
     if (!room) return cb({ ok: false, error: 'ไม่พบห้องนี้ ตรวจสอบ Room Code อีกครั้ง' });
 
     const existing = db.getPlayersByRoom(room.roomId);
+    const activeInRoom = existing.filter((p) => p.connected || p.playerId === room.hostId);
     if (db.getPlayerCount() >= MAX_SERVER_PLAYERS) return cb({ ok: false, error: 'ผู้เล่นทั้ง Server ครบ 80 คนแล้ว กรุณารอจนกว่าจะมีผู้เล่นออก' });
-    if (existing.length >= room.maxPlayers) return cb({ ok: false, error: 'ห้องเต็มแล้ว' });
-    if (room.gameStatus !== 'lobby') return cb({ ok: false, error: 'เกมเริ่มไปแล้ว ไม่สามารถเข้าร่วมได้' });
+    if (activeInRoom.length >= room.maxPlayers) return cb({ ok: false, error: 'ห้องเต็มแล้ว' });
+
+    // New players may join a room that is on the post-game results screen.
+    // They will choose a new card before the Host starts the next round.
+    if (room.gameStatus === 'playing') {
+      return cb({ ok: false, error: 'เกมกำลังเล่นอยู่ ไม่สามารถเข้าร่วมกลางเกมได้' });
+    }
+    if (room.gameStatus !== 'lobby' && room.gameStatus !== 'ended') {
+      return cb({ ok: false, error: 'ไม่สามารถเข้าร่วมห้องนี้ได้ในขณะนี้' });
+    }
+
+    clearPostGameResetTimer(room.roomId);
 
     const playerId = nanoid(8);
     db.createPlayer({
@@ -572,6 +583,11 @@ io.on('connection', (socket) => {
 
     const player = db.getPlayer(playerId);
     if (!player || player.roomId !== roomId) return cb({ ok: false, error: 'ไม่พบผู้เล่นในห้อง' });
+
+    // A player who just joined after the previous game has no old card to reuse.
+    if (choice === 'reuse' && !player.selectedCardId) {
+      return cb({ ok: false, error: 'ผู้เล่นใหม่ต้องเลือกรับบัตรใหม่' });
+    }
 
     // Do not allow a player to make a second choice in the same round.
     if ((room.playAgainChoices || {})[playerId]) {
