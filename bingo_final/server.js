@@ -8,6 +8,9 @@ const { nanoid } = require('nanoid');
 const db = require('./db');
 const { generateCards, checkBingo, generateRoomCode } = require('./gameLogic');
 
+// Global server safety limit: maximum 80 players across all rooms.
+const MAX_SERVER_PLAYERS = 80;
+
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
@@ -15,11 +18,6 @@ const io = new Server(server, { cors: { origin: '*' } });
 app.use(express.static(path.join(__dirname, 'public')));
 
 const PORT = process.env.PORT || 3000;
-const MAX_SERVER_PLAYERS = 80;
-
-function getServerPlayerCount() {
-  return db.getPlayerCount();
-}
 
 // ---------- helpers ----------
 
@@ -91,19 +89,15 @@ io.on('connection', (socket) => {
     try {
       const cleanHostName = String(hostName || '').trim();
       if (!cleanHostName) return cb({ ok: false, error: 'กรุณากรอกชื่อ Host ก่อนสร้างห้อง' });
+      if (db.getPlayerCount() >= MAX_SERVER_PLAYERS) return cb({ ok: false, error: 'ผู้เล่นทั้ง Server ครบ 80 คนแล้ว กรุณารอจนกว่าจะมีผู้เล่นออก' });
       if (cleanHostName.length > 20) return cb({ ok: false, error: 'ชื่อยาวเกิน 20 ตัวอักษร' });
       const cardCount = [20, 30, 50, 100].includes(config.cardCount) ? config.cardCount : 30;
-      const maxPlayersOptions = [10, 20, 30, 40, 50, 60];
-      const maxPlayers = maxPlayersOptions.includes(Number(config.maxPlayers)) ? Number(config.maxPlayers) : 20;
+      const maxPlayers = [10, 15, 20, 30, 40, 50, 60].includes(Number(config.maxPlayers)) ? Number(config.maxPlayers) : 20;
       const numberMin = Number.isFinite(Number(config.numberMin)) ? Number(config.numberMin) : 1;
       const numberMax = Number.isFinite(Number(config.numberMax)) ? Number(config.numberMax) : 75;
 
       if (!Number.isInteger(numberMin) || !Number.isInteger(numberMax) || numberMin < 1 || numberMax < numberMin || numberMax > 999 || numberMax - numberMin + 1 < 25) {
         return cb({ ok: false, error: 'ช่วงเลขต้องมีอย่างน้อย 25 ค่า' });
-      }
-
-      if (getServerPlayerCount() >= MAX_SERVER_PLAYERS) {
-        return cb({ ok: false, error: `ผู้เล่นทั้ง Server ครบ ${MAX_SERVER_PLAYERS} คนแล้ว กรุณารอให้มีคนออกก่อน` });
       }
 
       const roomId = nanoid(10);
@@ -173,8 +167,8 @@ io.on('connection', (socket) => {
     if (!room) return cb({ ok: false, error: 'ไม่พบห้องนี้ ตรวจสอบ Room Code อีกครั้ง' });
 
     const existing = db.getPlayersByRoom(room.roomId);
-    if (existing.length >= room.maxPlayers) return cb({ ok: false, error: `ห้องเต็มแล้ว (${room.maxPlayers} คน)` });
-    if (getServerPlayerCount() >= MAX_SERVER_PLAYERS) return cb({ ok: false, error: `ผู้เล่นทั้ง Server ครบ ${MAX_SERVER_PLAYERS} คนแล้ว กรุณารอให้มีคนออกก่อน` });
+    if (db.getPlayerCount() >= MAX_SERVER_PLAYERS) return cb({ ok: false, error: 'ผู้เล่นทั้ง Server ครบ 80 คนแล้ว กรุณารอจนกว่าจะมีผู้เล่นออก' });
+    if (existing.length >= room.maxPlayers) return cb({ ok: false, error: 'ห้องเต็มแล้ว' });
     if (room.gameStatus !== 'lobby') return cb({ ok: false, error: 'เกมเริ่มไปแล้ว ไม่สามารถเข้าร่วมได้' });
 
     const playerId = nanoid(8);
@@ -389,7 +383,6 @@ io.on('connection', (socket) => {
     const target = db.getPlayer(targetPlayerId);
     if (!target || target.roomId !== roomId) return cb({ ok: false, error: 'ไม่พบผู้เล่นคนนี้ในห้อง' });
     if (target.selectedCardId) db.updateCard(target.selectedCardId, { status: 'available', selectedBy: null });
-    db.updatePlayer(targetPlayerId, { selectedCardId: null, markedNumbers: [], socketId: null, connected: false });
     const targetSocket = target.socketId ? io.sockets.sockets.get(target.socketId) : null;
     if (targetSocket) {
       targetSocket.emit('kicked', { message: 'Host นำคุณออกจากห้องแล้ว' });
@@ -418,11 +411,10 @@ io.on('connection', (socket) => {
     }
 
     const player = db.getPlayer(playerId);
-    if (player) {
-      if (player.selectedCardId) db.updateCard(player.selectedCardId, { status: 'available', selectedBy: null });
-      db.updatePlayer(playerId, { selectedCardId: null, markedNumbers: [], socketId: null, connected: false });
-      db.deletePlayer(playerId);
+    if (player && player.selectedCardId) {
+      db.updateCard(player.selectedCardId, { status: 'available', selectedBy: null });
     }
+    db.deletePlayer(playerId);
     socket.leave(roomId);
     socket.data.roomId = null;
     socket.data.playerId = null;

@@ -31,9 +31,6 @@ function updateRangePreview(){const valid=Number.isInteger(selectedRange.min)&&N
 updateRangePreview();
 
 $('btn-create-room').onclick=()=>{
-  localStorage.removeItem('bingo_playerId');
-  localStorage.removeItem('bingo_roomCode');
-  me={playerId:null,roomCode:null,isHost:false};
   const hostName=requireName($('input-host-name'),'ชื่อของคุณ'); if(!hostName)return;
   const min=selectedRange.min,max=selectedRange.max;
   if(!Number.isInteger(min)||!Number.isInteger(max)||min<1||max<min||max>999||max-min+1<25)return toast('ช่วงเลขต้องมีอย่างน้อย 25 ตัว และไม่เกิน 999','error');
@@ -47,9 +44,6 @@ $('btn-create-room').onclick=()=>{
   });
 };
 $('btn-join-room').onclick=()=>{
-  localStorage.removeItem('bingo_playerId');
-  localStorage.removeItem('bingo_roomCode');
-  me={playerId:null,roomCode:null,isHost:false};
   const code=$('input-room-code').value.trim().toUpperCase(); if(!code)return toast('กรุณาใส่รหัสห้อง','error');
   const name=requireName($('input-player-name'),'ชื่อของคุณ'); if(!name)return;
   socket.emit('join_room',{roomCode:code,playerName:name},res=>{if(!res?.ok)return toast(res?.error||'เข้าห้องไม่สำเร็จ','error');me={playerId:res.playerId,roomCode:res.roomCode,isHost:false};localStorage.setItem('bingo_playerId',me.playerId);localStorage.setItem('bingo_roomCode',me.roomCode);toast('เข้าห้องสำเร็จ','success');setTimeout(()=>screen('screen-lobby'),80);});
