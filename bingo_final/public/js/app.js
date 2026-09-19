@@ -51,7 +51,24 @@ $('btn-create-room').onclick=()=>{
 $('btn-join-room').onclick=()=>{
   const code=$('input-room-code').value.trim().toUpperCase(); if(!code)return toast('กรุณาใส่รหัสห้อง','error');
   const name=requireName($('input-player-name'),'ชื่อของคุณ'); if(!name)return;
-  socket.emit('join_room',{roomCode:code,playerName:name},res=>{if(!res?.ok)return toast(res?.error||'เข้าห้องไม่สำเร็จ','error');me={playerId:res.playerId,roomCode:res.roomCode,isHost:false};saveSession();toast('เข้าห้องสำเร็จ','success');setTimeout(()=>screen('screen-lobby'),80);});
+  socket.emit('join_room',{roomCode:code,playerName:name},res=>{
+  if(!res?.ok)return toast(res?.error||'เข้าห้องไม่สำเร็จ','error');
+  me={playerId:res.playerId,roomCode:res.roomCode,isHost:false};
+  saveSession();
+  toast('เข้าห้องสำเร็จ','success');
+  // A brand-new player joining while the previous game is on the results
+  // screen must go straight to card selection. Do not send them through the
+  // lobby first, otherwise the delayed lobby navigation can overwrite the
+  // card-picking screen until another room update happens.
+  if(res.joiningAfterGame){
+    isChoosingNewCard=true;
+    selectedPreviewCard=null;
+    if(state){ renderCardGrid(); }
+    screen('screen-pick');
+  }else{
+    setTimeout(()=>screen('screen-lobby'),80);
+  }
+});
 };
 $('input-room-code').oninput=e=>e.target.value=e.target.value.toUpperCase();
 

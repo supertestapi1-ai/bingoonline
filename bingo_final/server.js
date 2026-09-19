@@ -317,7 +317,16 @@ io.on('connection', (socket) => {
     socket.data.roomId = room.roomId;
     socket.data.playerId = playerId;
 
-    cb({ ok: true, roomId: room.roomId, roomCode: room.roomCode, playerId });
+    // Tell the client whether this is a brand-new player joining during the
+    // post-game results phase. The client uses this flag immediately instead
+    // of waiting for a later broadcast/event before showing card selection.
+    cb({
+      ok: true,
+      roomId: room.roomId,
+      roomCode: room.roomCode,
+      playerId,
+      joiningAfterGame,
+    });
     broadcastRoom(room.roomId);
     if (joiningAfterGame) {
       socket.emit('start_new_card_selection');
