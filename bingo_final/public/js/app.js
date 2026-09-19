@@ -5,6 +5,7 @@ let me = { playerId: localStorage.getItem('bingo_playerId'), roomCode: localStor
 let config = { cardCount:30, maxPlayers:20, numberMin:1, numberMax:75 };
 let selectedRange = {min:1,max:75};
 let selectedPreviewCard = null;
+let isChoosingNewCard = false;
 
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const pad = n => String(n).padStart(2,'0');
@@ -60,7 +61,8 @@ socket.on('kicked',msg=>{localStorage.removeItem('bingo_playerId');localStorage.
 socket.on('room_closed',msg=>{localStorage.removeItem('bingo_playerId');localStorage.removeItem('bingo_roomCode');state=null;me={playerId:null,roomCode:null,isHost:false};$('modal-bingo').classList.add('hidden');screen('screen-home');toast(msg?.message||'Host ปิดห้องแล้ว','error');});
 socket.on('bingo',info=>{renderWinners(state);openBingo(info);});
 socket.on('game_ended',info=>{renderResults(info.winners||[]);screen('screen-results');});
-socket.on('game_reset',()=>{$('modal-bingo').classList.add('hidden');toast('พร้อมสำหรับรอบใหม่แล้ว 🎉','success');screen('screen-lobby');renderAll();});
+socket.on('game_reset',()=>{isChoosingNewCard=false;$('modal-bingo').classList.add('hidden');toast('พร้อมสำหรับรอบใหม่แล้ว 🎉','success');screen('screen-lobby');renderAll();});
+socket.on('start_new_card_selection',()=>{isChoosingNewCard=true;selectedPreviewCard=null;renderCardGrid();screen('screen-pick');toast('รับบัตรใหม่แล้ว 🎟️ เลือกบัตรใหม่ได้เลย','success');});
 socket.on('play_again_progress',info=>{if($('play-again-status'))$('play-again-status').textContent=`เลือกแล้ว ${info.chosen}/${info.total} คน — รอคนอื่น…`;});
 
 function renderAll(){
@@ -86,7 +88,7 @@ function renderAll(){
  const mine=state.players.find(p=>p.playerId===me.playerId);$('lobby-my-status').innerHTML=me.isHost?'👑 คุณคือ Host — ไม่ต้องเลือกบัตร':mine?.selectedCardId?`✅ บัตรของคุณ <strong>#${pad(getCardNumber(mine.selectedCardId))}</strong> พร้อมเล่น`:'🎟️ คุณยังไม่ได้เลือกบัตร';
  if(state.gameStatus==='lobby'){if(document.querySelector('#screen-game.active'))screen('screen-lobby');}
  else if(state.gameStatus==='playing'){screen('screen-game');socket.emit('get_my_card',{},res=>{if(res?.ok&&res.myCard)renderMyCard(res.myCard);});}
- else if(state.gameStatus==='ended'){screen('screen-results');}
+ else if(state.gameStatus==='ended'){if(isChoosingNewCard){renderCardGrid();screen('screen-pick');}else{screen('screen-results');}}
 }
 function getMeName(){return state?.players.find(p=>p.playerId===me.playerId)?.playerName||'Player';}
 function getCardNumber(id){return state?.cards.find(c=>c.cardId===id)?.cardNumber||'?';}
@@ -119,7 +121,7 @@ $('btn-start-game').onclick=()=>socket.emit('start_game',{},res=>{if(!res?.ok)to
 
 function renderCardGrid(){const grid=$('card-grid');grid.innerHTML='';const mine=state.players.find(p=>p.playerId===me.playerId)?.selectedCardId;const selected=new Set(state.cards.filter(c=>c.status==='selected').map(c=>c.cardId));$('pick-progress').textContent=`${selected.size}/${state.cards.length} ถูกเลือก`;state.cards.forEach(card=>{const isMine=card.cardId===mine;const locked=card.status==='selected'&&!isMine;const e=document.createElement('button');e.type='button';e.className=`select-card ${locked?'locked':''} ${isMine?'selected':''}`;e.innerHTML=`<div class="select-head"><b>บัตร #${pad(card.cardNumber)}</b><span>${isMine?'✓ ของฉัน':locked?'🔒 ถูกเลือก':'ว่าง'}</span></div><div class="bingo-head mini"><b>B</b><b>I</b><b>N</b><b>G</b><b>O</b></div><div class="bingo-grid card-preview-grid">${(card.numbers||[]).flat().map(n=>`<span>${n}</span>`).join('')}</div><div class="card-foot">${isMine?'✓ เลือกอยู่':locked?'✕ ถูกเลือกแล้ว':'แตะเพื่อดูบัตร'}</div>${locked?'<div class="card-lock-overlay">✕<small>ถูกเลือกแล้ว</small></div>':''}`;if(!locked)e.onclick=()=>openPreview(card);grid.appendChild(e);});}
 function openPreview(card){selectedPreviewCard=card;$('preview-title').textContent=`บัตร #${pad(card.cardNumber)}`;$('preview-grid').innerHTML=(card.numbers||[]).flat().map(n=>`<span>${n}</span>`).join('');$('modal-preview').classList.remove('hidden');}
-$('btn-select-this-card').onclick=()=>{if(!selectedPreviewCard)return;socket.emit('select_card',{cardId:selectedPreviewCard.cardId},res=>{if(!res?.ok)return toast(res.error,'error');$('modal-preview').classList.add('hidden');toast(`เลือกบัตร #${pad(res.card.cardNumber)} แล้ว`,'success');renderCardGrid();screen('screen-lobby');});};
+$('btn-select-this-card').onclick=()=>{if(!selectedPreviewCard)return;socket.emit('select_card',{cardId:selectedPreviewCard.cardId},res=>{if(!res?.ok)return toast(res.error,'error');$('modal-preview').classList.add('hidden');toast(`เลือกบัตร #${pad(res.card.cardNumber)} แล้ว`,'success');renderCardGrid();if(isChoosingNewCard){$('pick-progress').textContent='เลือกบัตรใหม่แล้ว • รอผู้เล่นคนอื่น';}else{screen('screen-lobby');}});};
 
 function renderCurrent(){if(!state)return;const total=state.config.numberMax-state.config.numberMin+1;const n=state.currentNumber;$('current-number').textContent=n??'–';$('remaining-label').textContent=total-(state.calledNumbers||[]).length;$('called-count').textContent=(state.calledNumbers||[]).length;}
 function renderCalledHistory(){if(!state)return;const h=$('called-history');h.innerHTML='';[...(state.calledNumbers||[])].reverse().slice(0,22).forEach((n,i)=>{const e=document.createElement('span');e.className=`called-ball ${i===0?'latest':''}`;e.textContent=n;h.appendChild(e);});}
@@ -129,9 +131,9 @@ function renderMyCard(card){if(!card)return;$('my-card-number').textContent=`บ
 function renderWinners(s){const list=$('host-winners');if(!list||!s)return;const ws=s.winners||[];$('winner-count').textContent=ws.length;list.innerHTML=ws.length?ws.map((w,i)=>`<div class="winner-item"><span class="winner-medal">${i===0?'🥇':i===1?'🥈':'🏆'}</span><div><b>${esc(w.playerName)}</b><small>บัตร #${pad(w.cardNumber)} • ${esc(w.pattern)}</small></div></div>`).join(''):'<div class="empty">ยังไม่มีใคร Bingo 🎯</div>';}
 function renderHostPlayers(){const list=$('host-player-list');if(!list||!state)return;$('host-player-count').textContent=state.players.length;list.innerHTML=state.players.map(p=>{const winner=(state.winners||[]).some(w=>w.playerId===p.playerId);return `<div class="host-player"><div><b>${p.isHost?'👑 ':''}${esc(p.playerName)} ${winner?'🏆 BINGO':''}</b><small>${p.selectedCardId?'บัตร #'+pad(getCardNumber(p.selectedCardId)):'ยังไม่เลือกบัตร'} • ✓ ${p.markedCount||0} ดวง ${winner?'• BINGO แล้ว':''}</small></div><span class="online ${p.connected?'on':''}"></span></div>`;}).join('');}
 function openBingo(info){$('bingo-names').innerHTML=`<div class="winner-big">🏆 ${esc(info.playerName)}</div><div class="winner-card">บัตร #${pad(info.cardNumber)}</div><div class="winner-pattern">${esc(info.pattern)}</div>`;$('modal-bingo').classList.remove('hidden');}
-function renderResults(ws){const list=$('results-list');list.innerHTML=ws.length?ws.map((w,i)=>`<div class="result-row"><b>${i+1}. ${esc(w.playerName)}</b><span>บัตร #${pad(w.cardNumber)}</span></div>`).join(''):'<div class="empty">ยังไม่มีผู้ชนะ</div>';
+function renderResults(ws){isChoosingNewCard=false;const list=$('results-list');list.innerHTML=ws.length?ws.map((w,i)=>`<div class="result-row"><b>${i+1}. ${esc(w.playerName)}</b><span>บัตร #${pad(w.cardNumber)}</span></div>`).join(''):'<div class="empty">ยังไม่มีผู้ชนะ</div>';
  const showChoices=!me.isHost; $('play-again-options').classList.toggle('hidden',!showChoices); $('results-wait-hint').classList.toggle('hidden',showChoices);
- if(showChoices){ const mine=state?.playAgainChoices?.[me.playerId]; $('play-again-status').textContent=mine?`เลือกแล้ว: ${mine==='new'?'🎟️ รับบัตรใหม่':'♻️ ใช้บัตรเดิม'} — รอคนอื่น…`:'ยังไม่ได้เลือกสำหรับรอบถัดไป'; $('btn-new-card').disabled=!!mine; $('btn-reuse-card').disabled=!!mine; }
+ if(showChoices && !isChoosingNewCard){ const mine=state?.playAgainChoices?.[me.playerId]; $('play-again-status').textContent=mine?`เลือกแล้ว: ${mine==='new'?'🎟️ รับบัตรใหม่':'♻️ ใช้บัตรเดิม'} — รอคนอื่น…`:'ยังไม่ได้เลือกสำหรับรอบถัดไป'; $('btn-new-card').disabled=!!mine; $('btn-reuse-card').disabled=!!mine; }
 }
 
 function leaveRoom(){if(!me.roomCode)return;const host=me.isHost;const ok=confirm(host?'ออกจากห้องในฐานะ Host? ห้องจะถูกปิดและผู้เล่นทั้งหมดจะออกด้วย':'ต้องการออกจากห้องนี้ใช่ไหม?');if(!ok)return;socket.emit('leave_room',{},res=>{if(!res?.ok)return toast(res?.error||'ออกจากห้องไม่สำเร็จ','error');localStorage.removeItem('bingo_playerId');localStorage.removeItem('bingo_roomCode');state=null;me={playerId:null,roomCode:null,isHost:false};$('modal-bingo').classList.add('hidden');screen('screen-home');toast('ออกจากห้องแล้ว','success');});}
