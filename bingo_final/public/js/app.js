@@ -31,7 +31,6 @@ function updateRangePreview(){const valid=Number.isInteger(selectedRange.min)&&N
 updateRangePreview();
 
 $('btn-create-room').onclick=()=>{
-  // Creating a room always starts a completely new session.
   localStorage.removeItem('bingo_playerId');
   localStorage.removeItem('bingo_roomCode');
   me={playerId:null,roomCode:null,isHost:false};
@@ -48,8 +47,6 @@ $('btn-create-room').onclick=()=>{
   });
 };
 $('btn-join-room').onclick=()=>{
-  // Joining by room code is always a brand-new player session.
-  // This prevents a stale localStorage identity/card from being reused.
   localStorage.removeItem('bingo_playerId');
   localStorage.removeItem('bingo_roomCode');
   me={playerId:null,roomCode:null,isHost:false};
@@ -65,8 +62,8 @@ socket.on('room_state',s=>{state=s;renderAll();if(document.querySelector('#scree
 socket.on('game_started',()=>{toast('เกมเริ่มแล้ว! 🎱','success');screen('screen-game');socket.emit('get_my_card',{},res=>{if(res?.ok&&res.myCard)renderMyCard(res.myCard);});});
 socket.on('number_drawn',info=>{if(state){state.currentNumber=info.number;state.calledNumbers=info.calledNumbers;}renderCurrent();renderCalledHistory();renderNumberBoard();});
 socket.on('host_disconnected',()=>toast('Host หลุดการเชื่อมต่อชั่วคราว','error'));
-socket.on('kicked',msg=>{localStorage.removeItem('bingo_playerId');localStorage.removeItem('bingo_roomCode');state=null;me={playerId:null,roomCode:null,isHost:false};selectedPreviewCard=null;$('modal-bingo').classList.add('hidden');screen('screen-home');toast(msg?.message||'คุณถูก Host นำออกจากห้อง','error');});
-socket.on('room_closed',msg=>{localStorage.removeItem('bingo_playerId');localStorage.removeItem('bingo_roomCode');state=null;me={playerId:null,roomCode:null,isHost:false};selectedPreviewCard=null;$('modal-bingo').classList.add('hidden');screen('screen-home');toast(msg?.message||'Host ปิดห้องแล้ว','error');});
+socket.on('kicked',msg=>{localStorage.removeItem('bingo_playerId');localStorage.removeItem('bingo_roomCode');state=null;me={playerId:null,roomCode:null,isHost:false};$('modal-bingo').classList.add('hidden');screen('screen-home');toast(msg?.message||'คุณถูก Host นำออกจากห้อง','error');});
+socket.on('room_closed',msg=>{localStorage.removeItem('bingo_playerId');localStorage.removeItem('bingo_roomCode');state=null;me={playerId:null,roomCode:null,isHost:false};$('modal-bingo').classList.add('hidden');screen('screen-home');toast(msg?.message||'Host ปิดห้องแล้ว','error');});
 socket.on('bingo',info=>{renderWinners(state);openBingo(info);});
 socket.on('game_ended',info=>{renderResults(info.winners||[]);screen('screen-results');});
 socket.on('game_reset',()=>{$('modal-bingo').classList.add('hidden');toast('พร้อมสำหรับรอบใหม่แล้ว 🎉','success');screen('screen-lobby');renderAll();});
