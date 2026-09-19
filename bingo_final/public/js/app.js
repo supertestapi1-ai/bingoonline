@@ -91,7 +91,7 @@ socket.on('play_again_progress',info=>{
 });
 
 function renderAll(){
- $('my-bingo-card')?.classList.toggle('hidden', !!me.isHost);
+ $('my-bingo-card')?.classList.toggle('hidden', !!me.isHost);document.body.classList.toggle('host-mode',!!me.isHost);
  if(!state)return;config={...config,...state.config};me.isHost=state.hostId===me.playerId;
  $('lobby-room-code').textContent=state.roomCode;$('game-room-code').textContent=state.roomCode;if($('results-room-code'))$('results-room-code').textContent=state.roomCode;$('game-player-name').textContent=me.isHost?'👑 Host':getMeName();
  const total=state.config.numberMax-state.config.numberMin+1, selected=state.cards.filter(c=>c.status==='selected').length;
@@ -112,7 +112,7 @@ function renderAll(){
  $('host-kick-hint').classList.toggle('hidden',!me.isHost||state.gameStatus!=='lobby');
  renderLobbyPlayers();renderCurrent();renderCalledHistory();renderNumberBoard();renderWinners(state);renderHostPlayers();
  const mine=state.players.find(p=>p.playerId===me.playerId);$('lobby-my-status').innerHTML=me.isHost?'👑 คุณคือ Host — ไม่ต้องเลือกบัตร':mine?.selectedCardId?`✅ บัตรของคุณ <strong>#${pad(getCardNumber(mine.selectedCardId))}</strong> พร้อมเล่น`:'🎟️ คุณยังไม่ได้เลือกบัตร';
- if(state.gameStatus==='lobby'){if(document.querySelector('#screen-game.active'))screen('screen-lobby');}
+ if(state.gameStatus==='lobby'){const activeId=document.querySelector('.screen.active')?.id;if(activeId==='screen-results'||activeId==='screen-game')screen('screen-lobby');}
  else if(state.gameStatus==='playing'){screen('screen-game');socket.emit('get_my_card',{},res=>{if(res?.ok&&res.myCard)renderMyCard(res.myCard);});}
  else if(state.gameStatus==='ended'){renderResults(state.winners||[]);if(isChoosingNewCard){renderCardGrid();screen('screen-pick');}else{screen('screen-results');}renderNextRoundControls();}
 }
@@ -228,5 +228,8 @@ $('btn-reuse-card').onclick=()=>choosePlayAgain('reuse');
 $('btn-host-next-round').onclick=()=>{
  const mode=$('btn-host-next-round').dataset.mode||'next';
  const event=mode==='reset'?'host_reset_room':'start_next_round';
- socket.emit(event,{},res=>{if(!res?.ok)toast(res.error,'error');});
+ socket.emit(event,{},res=>{
+   if(!res?.ok)return toast(res.error||'การทำรายการไม่สำเร็จ','error');
+   if(event==='host_reset_room'){screen('screen-lobby');renderAll();toast('เปิดห้องรอผู้เล่นใหม่แล้ว 🎉','success');}
+ });
 };

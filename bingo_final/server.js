@@ -689,6 +689,12 @@ io.on('connection', (socket) => {
     if (!room || room.hostId !== playerId) {
       return cb({ ok: false, error: 'เฉพาะ Host เท่านั้น' });
     }
+    // The room may already have auto-reset to Lobby after the last old player left.
+    // Let the same Host button recover cleanly from that stale results screen.
+    if (room.gameStatus === 'lobby') {
+      broadcastRoom(roomId);
+      return cb({ ok: true, alreadyLobby: true });
+    }
     if (room.gameStatus !== 'ended') {
       return cb({ ok: false, error: 'ห้องไม่ได้อยู่ในช่วงจบเกม' });
     }
