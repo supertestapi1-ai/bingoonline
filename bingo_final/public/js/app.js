@@ -97,7 +97,9 @@ function renderAll(){
 function getMeName(){return state?.players.find(p=>p.playerId===me.playerId)?.playerName||'Player';}
 function getCardNumber(id){return state?.cards.find(c=>c.cardId===id)?.cardNumber||'?';}
 function getNextRoundStatus(){
- const players=(state?.players||[]).filter(p=>!p.isHost);
+ // In the post-game screen, offline players have already left/closed the browser
+ // and must not block the remaining players or Host.
+ const players=(state?.players||[]).filter(p=>!p.isHost && p.connected);
  const choices=state?.playAgainChoices||{};
  const chosen=players.filter(p=>choices[p.playerId]==='new'||choices[p.playerId]==='reuse').length;
  const allChosen=players.length>0&&chosen===players.length;
