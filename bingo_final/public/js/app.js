@@ -91,6 +91,7 @@ socket.on('play_again_progress',info=>{
 });
 
 function renderAll(){
+ $('my-bingo-card')?.classList.toggle('hidden', !!me.isHost);
  if(!state)return;config={...config,...state.config};me.isHost=state.hostId===me.playerId;
  $('lobby-room-code').textContent=state.roomCode;$('game-room-code').textContent=state.roomCode;if($('results-room-code'))$('results-room-code').textContent=state.roomCode;$('game-player-name').textContent=me.isHost?'👑 Host':getMeName();
  const total=state.config.numberMax-state.config.numberMin+1, selected=state.cards.filter(c=>c.status==='selected').length;
