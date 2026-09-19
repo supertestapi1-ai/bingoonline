@@ -15,43 +15,34 @@ const MAX_SERVER_PLAYERS = 80;
 // refresh/reconnect. If every non-host player has left the browser and stays
 // offline for the full delay, reset the same room back to the lobby so the
 // Host can continue using the same Room Code for a new group of players.
-const POST_GAME_RESET_DELAY_MS = 15_000;
-const postGameResetTimers = new Map();
+const POST_GAME_REJOIN_GRACE_MS = 60_000;
+const disconnectedPlayerTimers = new Map();
 
-function clearPostGameResetTimer(roomId) {
-  const timer = postGameResetTimers.get(roomId);
+function clearDisconnectedPlayerTimer(playerId) {
+  const timer = disconnectedPlayerTimers.get(playerId);
   if (timer) {
     clearTimeout(timer);
-    postGameResetTimers.delete(roomId);
+    disconnectedPlayerTimers.delete(playerId);
   }
 }
 
-function resetRoomAfterEveryoneLeaves(roomId) {
+function releasePlayerCard(player) {
+  if (player?.selectedCardId) {
+    db.updateCard(player.selectedCardId, { status: 'available', selectedBy: null });
+  }
+}
+
+function resetRoomToLobby(roomId) {
   const room = db.getRoom(roomId);
-  if (!room || room.gameStatus !== 'ended' || !room.hostConnected) {
-    clearPostGameResetTimer(roomId);
-    return;
-  }
+  if (!room || room.gameStatus !== 'ended' || !room.hostConnected) return false;
 
-  const players = db.getPlayersByRoom(roomId);
-  const nonHosts = players.filter((p) => p.playerId !== room.hostId);
-  const onlineNonHosts = nonHosts.filter((p) => p.connected);
-
-  // Someone came back before the grace period finished. Keep the room as-is.
-  if (onlineNonHosts.length > 0) {
-    clearPostGameResetTimer(roomId);
-    return;
-  }
-
-  // Release every old player's card and remove the old player records.
-  nonHosts.forEach((p) => {
-    if (p.selectedCardId) {
-      db.updateCard(p.selectedCardId, { status: 'available', selectedBy: null });
-    }
+  db.getPlayersByRoom(roomId).forEach((p) => {
+    if (p.playerId === room.hostId) return;
+    clearDisconnectedPlayerTimer(p.playerId);
+    releasePlayerCard(p);
     db.deletePlayer(p.playerId);
   });
 
-  // Keep the same room and same Host, but prepare it for a brand-new group.
   db.updateRoom(roomId, {
     gameStatus: 'lobby',
     currentNumber: null,
@@ -60,47 +51,78 @@ function resetRoomAfterEveryoneLeaves(roomId) {
     playAgainChoices: {},
   });
 
-  // Defensive cleanup: no card should remain locked by an old player.
   db.getCardsByRoom(roomId).forEach((c) => {
     if (c.selectedBy !== room.hostId) {
       db.updateCard(c.cardId, { status: 'available', selectedBy: null });
     }
   });
 
-  clearPostGameResetTimer(roomId);
   io.to(roomId).emit('game_reset', {
     reason: 'all_players_left',
-    message: 'ผู้เล่นชุดเดิมออกจากห้องหมดแล้ว ห้องเดิมพร้อมรับผู้เล่นชุดใหม่',
+    message: 'ผู้เล่นชุดเดิมออกจากห้องแล้ว ห้องเดิมพร้อมรับผู้เล่นชุดใหม่',
   });
   broadcastRoom(roomId);
+  return true;
 }
 
-function schedulePostGameReset(roomId) {
+function maybeResetRoomAfterEveryoneLeaves(roomId) {
   const room = db.getRoom(roomId);
-  if (!room || room.gameStatus !== 'ended' || !room.hostConnected) return;
+  if (!room || room.gameStatus !== 'ended' || !room.hostConnected) return false;
 
-  const players = db.getPlayersByRoom(roomId);
-  const nonHosts = players.filter((p) => p.playerId !== room.hostId);
-  const onlineNonHosts = nonHosts.filter((p) => p.connected);
+  const nonHosts = db.getPlayersByRoom(roomId).filter((p) => p.playerId !== room.hostId);
+  if (nonHosts.length > 0) return false;
 
-  if (onlineNonHosts.length > 0) {
-    clearPostGameResetTimer(roomId);
+  return resetRoomToLobby(roomId);
+}
+
+function removeDisconnectedPlayer(playerId) {
+  const player = db.getPlayer(playerId);
+  if (!player) {
+    clearDisconnectedPlayerTimer(playerId);
+    return;
+  }
+  if (player.connected) {
+    clearDisconnectedPlayerTimer(playerId);
     return;
   }
 
-  if (postGameResetTimers.has(roomId)) return;
+  const room = db.getRoom(player.roomId);
+  clearDisconnectedPlayerTimer(playerId);
+  releasePlayerCard(player);
+  db.deletePlayer(playerId);
 
-  io.to(roomId).emit('post_game_reset_pending', {
-    seconds: Math.ceil(POST_GAME_RESET_DELAY_MS / 1000),
-    message: 'ผู้เล่นชุดเดิมออกจากห้องหมดแล้ว ระบบจะเตรียมห้องเดิมสำหรับผู้เล่นชุดใหม่',
-  });
+  if (room && room.gameStatus === 'ended') {
+    const choices = { ...(room.playAgainChoices || {}) };
+    delete choices[playerId];
+    db.updateRoom(room.roomId, { playAgainChoices: choices });
+    if (!maybeResetRoomAfterEveryoneLeaves(room.roomId)) {
+      broadcastRoom(room.roomId);
+    }
+  }
+}
+
+function scheduleDisconnectedPlayerCleanup(playerId) {
+  const player = db.getPlayer(playerId);
+  if (!player || player.connected) return;
+  const room = db.getRoom(player.roomId);
+  if (!room || room.gameStatus !== 'ended') return;
+  if (disconnectedPlayerTimers.has(playerId)) return;
 
   const timer = setTimeout(() => {
-    postGameResetTimers.delete(roomId);
-    resetRoomAfterEveryoneLeaves(roomId);
-  }, POST_GAME_RESET_DELAY_MS);
+    disconnectedPlayerTimers.delete(playerId);
+    removeDisconnectedPlayer(playerId);
+  }, POST_GAME_REJOIN_GRACE_MS);
 
-  postGameResetTimers.set(roomId, timer);
+  disconnectedPlayerTimers.set(playerId, timer);
+}
+
+function cleanupDisconnectedPlayersAtGameEnd(roomId) {
+  const room = db.getRoom(roomId);
+  if (!room || room.gameStatus !== 'ended') return;
+  db.getPlayersByRoom(roomId)
+    .filter((p) => p.playerId !== room.hostId && !p.connected)
+    .forEach((p) => scheduleDisconnectedPlayerCleanup(p.playerId));
+  maybeResetRoomAfterEveryoneLeaves(roomId);
 }
 
 const app = express();
@@ -263,16 +285,16 @@ io.on('connection', (socket) => {
     if (db.getPlayerCount() >= MAX_SERVER_PLAYERS) return cb({ ok: false, error: 'ผู้เล่นทั้ง Server ครบ 80 คนแล้ว กรุณารอจนกว่าจะมีผู้เล่นออก' });
     if (activeInRoom.length >= room.maxPlayers) return cb({ ok: false, error: 'ห้องเต็มแล้ว' });
 
+    const joiningAfterGame = room.gameStatus === 'ended';
+
     // New players may join a room that is on the post-game results screen.
-    // They will choose a new card before the Host starts the next round.
+    // They are automatically treated as new-card players and can choose a card immediately.
     if (room.gameStatus === 'playing') {
       return cb({ ok: false, error: 'เกมกำลังเล่นอยู่ ไม่สามารถเข้าร่วมกลางเกมได้' });
     }
     if (room.gameStatus !== 'lobby' && room.gameStatus !== 'ended') {
       return cb({ ok: false, error: 'ไม่สามารถเข้าร่วมห้องนี้ได้ในขณะนี้' });
     }
-
-    clearPostGameResetTimer(room.roomId);
 
     const playerId = nanoid(8);
     db.createPlayer({
@@ -286,12 +308,20 @@ io.on('connection', (socket) => {
       joinedAt: Date.now(),
     });
 
+    if (joiningAfterGame) {
+      const choices = { ...(room.playAgainChoices || {}), [playerId]: 'new' };
+      db.updateRoom(room.roomId, { playAgainChoices: choices });
+    }
+
     socket.join(room.roomId);
     socket.data.roomId = room.roomId;
     socket.data.playerId = playerId;
 
     cb({ ok: true, roomId: room.roomId, roomCode: room.roomCode, playerId });
     broadcastRoom(room.roomId);
+    if (joiningAfterGame) {
+      socket.emit('start_new_card_selection');
+    }
   });
 
   // 3) Reconnect (after refresh / dropped connection)
@@ -303,7 +333,7 @@ io.on('connection', (socket) => {
       return cb({ ok: false, error: 'ไม่พบผู้เล่นคนนี้ในห้อง' });
     }
 
-    clearPostGameResetTimer(room.roomId);
+    clearDisconnectedPlayerTimer(playerId);
     db.updatePlayer(playerId, { connected: true, socketId: socket.id });
     if (playerId === room.hostId) db.updateRoom(room.roomId, { hostConnected: true });
 
@@ -321,6 +351,9 @@ io.on('connection', (socket) => {
       myCard: myCardPayload(playerId),
     });
     broadcastRoom(room.roomId);
+    if (room.gameStatus === 'ended' && room.playAgainChoices?.[playerId] === 'new' && !db.getPlayer(playerId)?.selectedCardId) {
+      socket.emit('start_new_card_selection');
+    }
   });
 
   // Preview a card's numbers before selecting (read-only, no lock taken)
@@ -381,6 +414,7 @@ io.on('connection', (socket) => {
       return cb({ ok: false, error: 'ไม่สามารถเปลี่ยนบัตรได้หลังเริ่มเกม' });
     }
     const player = db.getPlayer(playerId);
+    clearDisconnectedPlayerTimer(playerId);
     if (player && player.selectedCardId) {
       db.updateCard(player.selectedCardId, { status: 'available', selectedBy: null });
       db.updatePlayer(playerId, { selectedCardId: null });
@@ -487,9 +521,9 @@ io.on('connection', (socket) => {
     db.updateRoom(roomId, { gameStatus: 'ended' });
     io.to(roomId).emit('game_ended', { winners: room.winners });
     broadcastRoom(roomId);
-    // If nobody is connected anymore except the Host, start the same-room
-    // cleanup grace period immediately. Otherwise normal play-again flow stays untouched.
-    schedulePostGameReset(roomId);
+    // Disconnected players get a 60-second reconnect grace. Connected players
+    // continue into the normal play-again flow.
+    cleanupDisconnectedPlayersAtGameEnd(roomId);
     cb({ ok: true });
   });
 
@@ -498,11 +532,12 @@ io.on('connection', (socket) => {
     const { roomId, playerId } = socket.data;
     const room = db.getRoom(roomId);
     if (!room || room.hostId !== playerId) return cb({ ok: false, error: 'เฉพาะ Host เท่านั้นที่เตะผู้เล่นได้' });
-    if (room.gameStatus !== 'lobby') return cb({ ok: false, error: 'เตะผู้เล่นได้เฉพาะตอนอยู่หน้า Lobby' });
+    if (!['lobby', 'ended'].includes(room.gameStatus)) return cb({ ok: false, error: 'เตะผู้เล่นได้เฉพาะตอน Lobby หรือช่วงรอรอบใหม่' });
     if (!targetPlayerId || targetPlayerId === room.hostId) return cb({ ok: false, error: 'ไม่สามารถเตะ Host ได้' });
     const target = db.getPlayer(targetPlayerId);
     if (!target || target.roomId !== roomId) return cb({ ok: false, error: 'ไม่พบผู้เล่นคนนี้ในห้อง' });
-    if (target.selectedCardId) db.updateCard(target.selectedCardId, { status: 'available', selectedBy: null });
+    clearDisconnectedPlayerTimer(targetPlayerId);
+    releasePlayerCard(target);
     const targetSocket = target.socketId ? io.sockets.sockets.get(target.socketId) : null;
     if (targetSocket) {
       targetSocket.emit('kicked', { message: 'Host นำคุณออกจากห้องแล้ว' });
@@ -511,8 +546,15 @@ io.on('connection', (socket) => {
       targetSocket.data.playerId = null;
     }
     db.deletePlayer(targetPlayerId);
+    if (room.gameStatus === 'ended') {
+      const choices = { ...(room.playAgainChoices || {}) };
+      delete choices[targetPlayerId];
+      db.updateRoom(roomId, { playAgainChoices: choices });
+      if (!maybeResetRoomAfterEveryoneLeaves(roomId)) broadcastRoom(roomId);
+    } else {
+      broadcastRoom(roomId);
+    }
     cb({ ok: true, playerId: targetPlayerId });
-    broadcastRoom(roomId);
   });
 
   // Leave room: player releases their card; Host closes the entire room.
@@ -531,6 +573,7 @@ io.on('connection', (socket) => {
     }
 
     const player = db.getPlayer(playerId);
+    clearDisconnectedPlayerTimer(playerId);
     if (player && player.selectedCardId) {
       db.updateCard(player.selectedCardId, { status: 'available', selectedBy: null });
     }
@@ -540,16 +583,10 @@ io.on('connection', (socket) => {
     socket.data.playerId = null;
 
     if (room.gameStatus === 'ended') {
-      // An explicit "ออกจากห้อง" means the player really left, so when the
-      // last old player leaves we can immediately turn the same room back
-      // into a lobby. Browser-close/disconnect still keeps the 15s grace.
-      const remainingOnline = db.getPlayersByRoom(roomId)
-        .filter((p) => p.playerId !== room.hostId && p.connected);
-      if (remainingOnline.length === 0) {
-        resetRoomAfterEveryoneLeaves(roomId);
-      } else {
-        broadcastRoom(roomId);
-      }
+      const choices = { ...(room.playAgainChoices || {}) };
+      delete choices[playerId];
+      db.updateRoom(roomId, { playAgainChoices: choices });
+      if (!maybeResetRoomAfterEveryoneLeaves(roomId)) broadcastRoom(roomId);
     } else {
       broadcastRoom(roomId);
     }
@@ -653,7 +690,7 @@ io.on('connection', (socket) => {
       return cb({ ok: false, error: `ยังมีผู้เล่นเก่าอยู่ในห้อง ${onlineNonHosts.length} คน` });
     }
 
-    resetRoomAfterEveryoneLeaves(roomId);
+    resetRoomToLobby(roomId);
     cb({ ok: true });
   });
 
@@ -718,11 +755,10 @@ io.on('connection', (socket) => {
     db.updatePlayer(playerId, { connected: false });
     if (playerId === room.hostId) {
       db.updateRoom(roomId, { hostConnected: false });
-      clearPostGameResetTimer(roomId);
       io.to(roomId).emit('host_disconnected');
     } else if (room.gameStatus === 'ended') {
-      // Once every non-host player is offline, start the grace timer.
-      schedulePostGameReset(roomId);
+      // Keep a short reconnect grace, then permanently remove the old session.
+      scheduleDisconnectedPlayerCleanup(playerId);
     }
     broadcastRoom(roomId);
   });

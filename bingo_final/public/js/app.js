@@ -6,6 +6,10 @@ let config = { cardCount:30, maxPlayers:20, numberMin:1, numberMax:75 };
 let selectedRange = {min:1,max:75};
 let selectedPreviewCard = null;
 let isChoosingNewCard = false;
+const SESSION_REJOIN_GRACE_MS = 60_000;
+function saveSession(){localStorage.setItem('bingo_playerId',me.playerId||'');localStorage.setItem('bingo_roomCode',me.roomCode||'');localStorage.setItem('bingo_sessionSeenAt',String(Date.now()));}
+function clearSession(){localStorage.removeItem('bingo_playerId');localStorage.removeItem('bingo_roomCode');localStorage.removeItem('bingo_sessionSeenAt');}
+
 
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const pad = n => String(n).padStart(2,'0');
@@ -39,7 +43,7 @@ $('btn-create-room').onclick=()=>{
   socket.emit('create_room',{hostName,config:{...config,numberMin:min,numberMax:max}},res=>{
     btn.disabled=false;btn.classList.remove('loading');
     if(!res?.ok)return toast(res?.error||'สร้างห้องไม่สำเร็จ','error');
-    me={playerId:res.playerId,roomCode:res.roomCode,isHost:true};localStorage.setItem('bingo_playerId',me.playerId);localStorage.setItem('bingo_roomCode',me.roomCode);
+    me={playerId:res.playerId,roomCode:res.roomCode,isHost:true};saveSession();
     toast(`สร้างห้อง ${res.roomCode} สำเร็จ`,'success');
     setTimeout(()=>screen('screen-lobby'),80);
   });
@@ -47,19 +51,19 @@ $('btn-create-room').onclick=()=>{
 $('btn-join-room').onclick=()=>{
   const code=$('input-room-code').value.trim().toUpperCase(); if(!code)return toast('กรุณาใส่รหัสห้อง','error');
   const name=requireName($('input-player-name'),'ชื่อของคุณ'); if(!name)return;
-  socket.emit('join_room',{roomCode:code,playerName:name},res=>{if(!res?.ok)return toast(res?.error||'เข้าห้องไม่สำเร็จ','error');me={playerId:res.playerId,roomCode:res.roomCode,isHost:false};localStorage.setItem('bingo_playerId',me.playerId);localStorage.setItem('bingo_roomCode',me.roomCode);toast('เข้าห้องสำเร็จ','success');setTimeout(()=>screen('screen-lobby'),80);});
+  socket.emit('join_room',{roomCode:code,playerName:name},res=>{if(!res?.ok)return toast(res?.error||'เข้าห้องไม่สำเร็จ','error');me={playerId:res.playerId,roomCode:res.roomCode,isHost:false};saveSession();toast('เข้าห้องสำเร็จ','success');setTimeout(()=>screen('screen-lobby'),80);});
 };
 $('input-room-code').oninput=e=>e.target.value=e.target.value.toUpperCase();
 
-socket.on('connect',()=>{ if(me.playerId&&me.roomCode)socket.emit('rejoin_room',{roomCode:me.roomCode,playerId:me.playerId},res=>{if(!res?.ok){localStorage.removeItem('bingo_playerId');localStorage.removeItem('bingo_roomCode');return;}me.isHost=!!res.isHost;state=res.state;renderAll();if(res.myCard)renderMyCard(res.myCard);}); });
+socket.on('connect',()=>{ const seen=Number(localStorage.getItem('bingo_sessionSeenAt')||0); if(me.playerId&&me.roomCode&&seen&&Date.now()-seen<=SESSION_REJOIN_GRACE_MS){ socket.emit('rejoin_room',{roomCode:me.roomCode,playerId:me.playerId},res=>{ if(!res?.ok){clearSession();state=null;me={playerId:null,roomCode:null,isHost:false};return;} saveSession();me.isHost=!!res.isHost;state=res.state;renderAll();if(res.myCard)renderMyCard(res.myCard); }); } else if(me.playerId||me.roomCode){ clearSession();me={playerId:null,roomCode:null,isHost:false}; } });
 socket.on('connect_error',()=>toast('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้','error'));
 socket.on('room_state',s=>{state=s;renderAll();if(document.querySelector('#screen-pick.active'))renderCardGrid();});
 socket.on('game_started',()=>{isChoosingNewCard=false;toast('เกมเริ่มแล้ว! 🎱','success');screen('screen-game');socket.emit('get_my_card',{},res=>{if(res?.ok&&res.myCard)renderMyCard(res.myCard);});});
 socket.on('number_drawn',info=>{if(state){state.currentNumber=info.number;state.calledNumbers=info.calledNumbers;}renderCurrent();renderCalledHistory();renderNumberBoard();});
 socket.on('host_disconnected',()=>toast('Host หลุดการเชื่อมต่อชั่วคราว','error'));
 socket.on('post_game_reset_pending',info=>{toast(info?.message||'ผู้เล่นชุดเดิมออกจากห้องหมดแล้ว ระบบกำลังเตรียมห้องสำหรับชุดใหม่','success');});
-socket.on('kicked',msg=>{localStorage.removeItem('bingo_playerId');localStorage.removeItem('bingo_roomCode');state=null;me={playerId:null,roomCode:null,isHost:false};$('modal-bingo').classList.add('hidden');screen('screen-home');toast(msg?.message||'คุณถูก Host นำออกจากห้อง','error');});
-socket.on('room_closed',msg=>{localStorage.removeItem('bingo_playerId');localStorage.removeItem('bingo_roomCode');state=null;me={playerId:null,roomCode:null,isHost:false};$('modal-bingo').classList.add('hidden');screen('screen-home');toast(msg?.message||'Host ปิดห้องแล้ว','error');});
+socket.on('kicked',msg=>{clearSession();state=null;me={playerId:null,roomCode:null,isHost:false};$('modal-bingo').classList.add('hidden');screen('screen-home');toast(msg?.message||'คุณถูก Host นำออกจากห้อง','error');});
+socket.on('room_closed',msg=>{clearSession();state=null;me={playerId:null,roomCode:null,isHost:false};$('modal-bingo').classList.add('hidden');screen('screen-home');toast(msg?.message||'Host ปิดห้องแล้ว','error');});
 socket.on('bingo',info=>{renderWinners(state);openBingo(info);});
 socket.on('game_ended',info=>{isChoosingNewCard=false;renderResults(info.winners||[]);screen('screen-results');});
 socket.on('game_reset',()=>{isChoosingNewCard=false;$('modal-bingo').classList.add('hidden');toast('พร้อมสำหรับรอบใหม่แล้ว 🎉','success');screen('screen-lobby');renderAll();});
@@ -144,8 +148,9 @@ function fillNumberBoard(b){if(!b||!state)return;b.innerHTML='';const called=new
 function renderNumberBoard(){if(!state)return;const b=$('number-board');const main=$('host-main-number-board');const total=state.config.numberMax-state.config.numberMin+1;if($('number-board-total'))$('number-board-total').textContent=total;if($('host-main-board-count'))$('host-main-board-count').textContent=total;fillNumberBoard(b);fillNumberBoard(main);}
 function renderMyCard(card){if(!card)return;$('my-card-number').textContent=`บัตร #${pad(card.cardNumber)}`;const called=new Set(state?.calledNumbers||[]),marked=new Set(card.markedNumbers||[]),grid=$('my-card-grid');grid.innerHTML='';(card.numbers||[]).flat().forEach(n=>{const e=document.createElement('button');e.type='button';e.className=`cell ${called.has(n)?'ready':''} ${marked.has(n)?'marked':''}`;e.textContent=n;e.onclick=()=>{if(!called.has(n))return toast('เลขนี้ยังไม่ออก','error');socket.emit('mark_number',{number:n},res=>{if(!res?.ok)toast(res.error,'error');else{e.classList.add('marked');if(res.bingo)e.classList.add('bingo-hit');}});};grid.appendChild(e);});}
 function renderWinners(s){const list=$('host-winners');if(!list||!s)return;const ws=s.winners||[];$('winner-count').textContent=ws.length;list.innerHTML=ws.length?ws.map((w,i)=>`<div class="winner-item"><span class="winner-medal">${i===0?'🥇':i===1?'🥈':'🏆'}</span><div><b>${esc(w.playerName)}</b><small>บัตร #${pad(w.cardNumber)} • ${esc(w.pattern)}</small></div></div>`).join(''):'<div class="empty">ยังไม่มีใคร Bingo 🎯</div>';}
-function renderHostPlayers(){const list=$('host-player-list');if(!list||!state)return;$('host-player-count').textContent=state.players.length;list.innerHTML=state.players.map(p=>{const winner=(state.winners||[]).some(w=>w.playerId===p.playerId);return `<div class="host-player"><div><b>${p.isHost?'👑 ':''}${esc(p.playerName)} ${winner?'🏆 BINGO':''}</b><small>${p.selectedCardId?'บัตร #'+pad(getCardNumber(p.selectedCardId)):'ยังไม่เลือกบัตร'} • ✓ ${p.markedCount||0} ดวง ${winner?'• BINGO แล้ว':''}</small></div><span class="online ${p.connected?'on':''}"></span></div>`;}).join('');}
+function renderHostPlayers(){const list=$('host-player-list');if(!list||!state)return;const visible=state.gameStatus==='ended'?state.players.filter(p=>p.isHost||p.connected):state.players;$('host-player-count').textContent=visible.length;list.innerHTML=visible.map(p=>{const winner=(state.winners||[]).some(w=>w.playerId===p.playerId);const canKick=me.isHost&&!p.isHost&&(state.gameStatus==='lobby'||state.gameStatus==='ended');const kick=canKick?`<button class="kick-btn" data-kick-host="${p.playerId}" type="button">เตะ</button>`:'';return `<div class="host-player"><div><b>${p.isHost?'👑 ':''}${esc(p.playerName)} ${winner?'🏆 BINGO':''}</b><small>${p.selectedCardId?'บัตร #'+pad(getCardNumber(p.selectedCardId)):'ยังไม่เลือกบัตร'} • ✓ ${p.markedCount||0} ดวง ${winner?'• BINGO แล้ว':''}</small></div><span class="online ${p.connected?'on':''}"></span>${kick}</div>`;}).join('');list.querySelectorAll('[data-kick-host]').forEach(btn=>{btn.onclick=()=>{const p=state.players.find(x=>x.playerId===btn.dataset.kickHost);if(!p)return;if(confirm(`ต้องการเตะ "${p.playerName}" ออกจากห้องใช่ไหม?`)){socket.emit('kick_player',{targetPlayerId:p.playerId},res=>{if(!res?.ok)toast(res.error||'เตะผู้เล่นไม่สำเร็จ','error');else toast(`นำ ${p.playerName} ออกจากห้องแล้ว`,'success');});}};});}
 function openBingo(info){$('bingo-names').innerHTML=`<div class="winner-big">🏆 ${esc(info.playerName)}</div><div class="winner-card">บัตร #${pad(info.cardNumber)}</div><div class="winner-pattern">${esc(info.pattern)}</div>`;$('modal-bingo').classList.remove('hidden');}
+function renderHostNextRoundPlayers(){const wrap=$('host-next-round-players');if(!wrap||!state||!me.isHost||state.gameStatus!=='ended')return;const players=state.players.filter(p=>!p.isHost&&p.connected);wrap.innerHTML=players.length?players.map(p=>{const choice=state.playAgainChoices?.[p.playerId];const status=choice==='new'?(p.selectedCardId?'🎟️ เลือกบัตรใหม่แล้ว':'🎟️ กำลังเลือกบัตรใหม่'):choice==='reuse'?'♻️ ใช้บัตรเดิม':'⏳ ยังไม่เลือก';return `<div class="next-player-row"><div><b>${esc(p.playerName)}</b><small>${status}</small></div><button class="kick-btn" data-kick-next="${p.playerId}" type="button">เตะ</button></div>`;}).join(''):'<div class="empty">ยังไม่มีผู้เล่นในรอบถัดไป</div>';wrap.querySelectorAll('[data-kick-next]').forEach(btn=>{btn.onclick=()=>{const p=state.players.find(x=>x.playerId===btn.dataset.kickNext);if(!p)return;if(confirm(`ต้องการเตะ "${p.playerName}" ออกจากห้องใช่ไหม?`)){socket.emit('kick_player',{targetPlayerId:p.playerId},res=>{if(!res?.ok)toast(res.error||'เตะผู้เล่นไม่สำเร็จ','error');});}};});}
 function renderNextRoundControls(){
  const box=$('host-next-round-box');
  const btn=$('btn-host-next-round');
@@ -154,6 +159,7 @@ function renderNextRoundControls(){
  const show=!!me.isHost && state?.gameStatus==='ended';
  box.classList.toggle('hidden',!show);
  if(!show)return;
+ renderHostNextRoundPlayers();
  const s=getNextRoundStatus();
  if(!s.hasPlayers){
    statusEl.textContent='✅ ผู้เล่นชุดเดิมออกจากห้องหมดแล้ว • พร้อมรอผู้เล่นใหม่';
@@ -192,7 +198,7 @@ function renderResults(ws){const list=$('results-list');list.innerHTML=ws.length
  renderNextRoundControls();
 }
 
-function leaveRoom(){if(!me.roomCode)return;const host=me.isHost;const ok=confirm(host?'ออกจากห้องในฐานะ Host? ห้องจะถูกปิดและผู้เล่นทั้งหมดจะออกด้วย':'ต้องการออกจากห้องนี้ใช่ไหม?');if(!ok)return;socket.emit('leave_room',{},res=>{if(!res?.ok)return toast(res?.error||'ออกจากห้องไม่สำเร็จ','error');localStorage.removeItem('bingo_playerId');localStorage.removeItem('bingo_roomCode');state=null;me={playerId:null,roomCode:null,isHost:false};$('modal-bingo').classList.add('hidden');screen('screen-home');toast('ออกจากห้องแล้ว','success');});}
+function leaveRoom(){if(!me.roomCode)return;const host=me.isHost;const ok=confirm(host?'ออกจากห้องในฐานะ Host? ห้องจะถูกปิดและผู้เล่นทั้งหมดจะออกด้วย':'ต้องการออกจากห้องนี้ใช่ไหม?');if(!ok)return;socket.emit('leave_room',{},res=>{if(!res?.ok)return toast(res?.error||'ออกจากห้องไม่สำเร็จ','error');clearSession();state=null;me={playerId:null,roomCode:null,isHost:false};$('modal-bingo').classList.add('hidden');screen('screen-home');toast('ออกจากห้องแล้ว','success');});}
 $('btn-leave-lobby').onclick=leaveRoom;$('btn-leave-game').onclick=leaveRoom;$('btn-leave-results').onclick=leaveRoom;
 $('btn-draw-number').onclick=()=>socket.emit('draw_number',{},res=>{if(!res?.ok)toast(res.error,'error');});
 $('btn-end-game').onclick=()=>{if(confirm('ต้องการจบเกมตอนนี้ใช่ไหม?'))socket.emit('end_game',{},res=>{if(!res?.ok)toast(res.error,'error');});};

@@ -29,3 +29,6 @@
 /* Post-game actions */
 .results-actions{display:flex;justify-content:center;margin-top:14px}
 .results-actions .btn{min-width:190px}
+
+/* Host controls during post-game waiting */
+.next-round-players{display:grid;gap:8px;margin:12px 0 14px}.next-player-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border:1px solid rgba(120,130,160,.18);border-radius:12px;background:rgba(120,130,160,.06)}.next-player-row>div{min-width:0}.next-player-row b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.next-player-row small{display:block;margin-top:2px;opacity:.7}.next-player-row .kick-btn{flex:0 0 auto}
