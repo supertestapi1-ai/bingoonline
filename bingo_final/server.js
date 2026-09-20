@@ -18,6 +18,7 @@ const MAX_SERVER_PLAYERS = 80;
 // Disconnected post-game players are kept in the room until they explicitly leave
 // or the Host removes them. They do not block the next-round readiness count.
 const disconnectedPlayerTimers = new Map();
+const POST_GAME_RECONNECT_GRACE_MS = 15_000;
 
 function clearDisconnectedPlayerTimer(playerId) {
   const timer = disconnectedPlayerTimers.get(playerId);
@@ -103,16 +104,34 @@ function removeDisconnectedPlayer(playerId) {
 }
 
 function scheduleDisconnectedPlayerCleanup(playerId) {
-  // Intentionally do not auto-remove disconnected players during the post-game
-  // waiting phase. They may reconnect and choose reuse/new later, or the Host
-  // can remove them manually.
-  return;
+  clearDisconnectedPlayerTimer(playerId);
+
+  const player = db.getPlayer(playerId);
+  if (!player || player.connected) return;
+  const room = db.getRoom(player.roomId);
+  if (!room || room.gameStatus !== 'ended' || playerId === room.hostId) return;
+
+  const timer = setTimeout(() => {
+    disconnectedPlayerTimers.delete(playerId);
+    removeDisconnectedPlayer(playerId);
+  }, POST_GAME_RECONNECT_GRACE_MS);
+  disconnectedPlayerTimers.set(playerId, timer);
 }
 
 function cleanupDisconnectedPlayersAtGameEnd(roomId) {
-  // No automatic kick after the game ends. Disconnected players remain visible
-  // to the Host but are excluded from next-round readiness counts.
-  maybeResetRoomAfterEveryoneLeaves(roomId);
+  const room = db.getRoom(roomId);
+  if (!room || room.gameStatus !== 'ended') return;
+
+  const disconnected = db.getPlayersByRoom(roomId)
+    .filter((p) => p.playerId !== room.hostId && !p.connected);
+
+  disconnected.forEach((p) => scheduleDisconnectedPlayerCleanup(p.playerId));
+
+  if (disconnected.length > 0) {
+    io.to(roomId).emit('post_game_reset_pending', {
+      message: `มีผู้เล่นที่หลุด/ออฟไลน์ ${disconnected.length} คน ระบบจะรอการเชื่อมต่อกลับ 15 วินาที และจะล้างเฉพาะคนที่ไม่กลับเข้ามาเท่านั้น`,
+    });
+  }
 }
 
 const app = express();
@@ -530,7 +549,7 @@ io.on('connection', (socket) => {
     db.updateRoom(roomId, { gameStatus: 'ended' });
     io.to(roomId).emit('game_ended', { winners: room.winners });
     broadcastRoom(roomId);
-    // Disconnected players get a 60-second reconnect grace. Connected players
+    // Disconnected players get a 15-second reconnect grace. Connected players
     // continue into the normal play-again flow.
     cleanupDisconnectedPlayersAtGameEnd(roomId);
     cb({ ok: true });
