@@ -144,8 +144,8 @@ input:focus{border-color:#8aa46e;box-shadow:0 0 0 3px rgba(92,126,71,.14)}
 #screen-home .home-shell{min-height:calc(100dvh - 10vh);box-sizing:border-box;padding-bottom:78px}
 #screen-home .site-credit{position:absolute;right:22px;bottom:18px}
 .site-credit .credit-by,.site-credit .credit-support{color:#fff8e9!important;-webkit-text-fill-color:#fff8e9!important;text-decoration:none!important}
-.site-credit .credit-by{font-size:1.35rem}
-.site-credit .credit-support{font-size:1.35rem}
+.site-credit .credit-by{font-size:1.75rem}
+.site-credit .credit-support{font-size:.80rem}
 
 #screen-game{height:100dvh;min-height:0;box-sizing:border-box;overflow:hidden;padding:10px 16px}
 #screen-game .page-shell{height:100%;min-height:0;display:flex;flex-direction:column}
@@ -170,4 +170,210 @@ input:focus{border-color:#8aa46e;box-shadow:0 0 0 3px rgba(92,126,71,.14)}
   #screen-game .game-layout{overflow:hidden}
   #screen-game .game-layout>main{overflow:auto}
   #screen-game .host-panel{overflow:auto}
+}
+
+
+/* v26: game viewport + card sizing only; card-selection screen remains unchanged */
+@media(min-width:901px){
+  /* Player: use the desktop viewport efficiently and center/enlarge the live card. */
+  #screen-game:not(.host-view) .game-layout>main,
+  body:not(.host-mode) #screen-game .game-layout>main{
+    display:flex;
+    flex-direction:column;
+    min-height:0;
+    overflow:hidden;
+  }
+  body:not(.host-mode) #screen-game .draw-card{
+    flex:0 0 170px;
+    min-height:170px;
+    margin-bottom:10px;
+  }
+  body:not(.host-mode) #screen-game .draw-ball{
+    width:128px;
+    height:128px;
+    font-size:3.8rem;
+    border-width:6px;
+  }
+  body:not(.host-mode) #screen-game .called-card{
+    flex:0 0 62px;
+    min-height:0;
+    margin-bottom:10px;
+    padding:9px 12px;
+  }
+  body:not(.host-mode) #screen-game .called-card .panel-head{margin-bottom:3px}
+  body:not(.host-mode) #screen-game .called-history{padding:0}
+  body:not(.host-mode) #screen-game .my-bingo-card{
+    flex:1 1 auto;
+    min-height:0;
+    width:min(720px,100%);
+    margin:0 auto;
+    padding:16px 18px 12px;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+  }
+  body:not(.host-mode) #screen-game .my-card-top{flex:0 0 auto}
+  body:not(.host-mode) #screen-game .my-bingo-card .bingo-head{flex:0 0 auto}
+  body:not(.host-mode) #screen-game .player-grid{
+    flex:0 1 auto;
+    width:min(100%,650px);
+    margin:0 auto;
+    gap:8px;
+    align-self:center;
+  }
+  body:not(.host-mode) #screen-game .player-grid .cell{
+    font-size:clamp(1.15rem,2vw,1.55rem);
+    min-width:0;
+  }
+  body:not(.host-mode) #screen-game .my-bingo-card>.hint{flex:0 0 auto;margin:7px 0 0}
+
+  /* Host: no page-level vertical scrollbar; compact upper areas and fit the number board. */
+  body.host-mode #screen-game .game-layout>main{
+    display:flex;
+    flex-direction:column;
+    min-height:0;
+    overflow:hidden;
+  }
+  body.host-mode #screen-game .draw-card{
+    flex:0 0 170px;
+    min-height:170px;
+    margin-bottom:10px;
+  }
+  body.host-mode #screen-game .draw-ball{
+    width:120px;
+    height:120px;
+    font-size:3.5rem;
+  }
+  body.host-mode #screen-game .called-card{
+    flex:0 0 62px;
+    min-height:0;
+    margin-bottom:10px;
+    padding:8px 12px;
+  }
+  body.host-mode #screen-game .host-main-board{
+    flex:1 1 auto;
+    min-height:0;
+    margin-bottom:0;
+    padding:12px;
+    display:flex;
+    flex-direction:column;
+  }
+  body.host-mode #screen-game .host-main-board-head{flex:0 0 auto;margin-bottom:8px}
+  body.host-mode #screen-game .number-board-large{
+    flex:1 1 auto;
+    min-height:0;
+    overflow:hidden;
+    grid-template-columns:repeat(10,minmax(0,1fr));
+    grid-auto-rows:1fr;
+    gap:6px;
+  }
+  body.host-mode #screen-game .number-board-large .number-dot{font-size:.9rem;min-height:0}
+  body.host-mode #screen-game .host-panel{
+    min-height:0;
+    overflow:hidden;
+  }
+  body.host-mode #screen-game .host-list{max-height:none;min-height:0}
+}
+
+@media(max-width:900px){
+  /* Keep the game inside the viewport. The card-selection screen is untouched. */
+  #screen-game{height:100dvh;min-height:100dvh;overflow:hidden}
+  #screen-game .page-shell{height:100%;min-height:0}
+  #screen-game .game-layout{height:calc(100% - 48px);min-height:0;overflow:hidden}
+
+  /* Player mobile: latest number + called numbers + full card in one viewport. */
+  body:not(.host-mode) #screen-game .game-layout>main{
+    display:grid;
+    grid-template-rows:92px 54px minmax(0,1fr);
+    gap:7px;
+    min-height:0;
+    overflow:hidden;
+  }
+  body:not(.host-mode) #screen-game .draw-card{
+    min-height:0;
+    height:92px;
+    margin:0;
+    padding:7px 10px;
+  }
+  body:not(.host-mode) #screen-game .draw-brand{gap:1px}
+  body:not(.host-mode) #screen-game .draw-brand .brand-balls.small b{width:25px;height:25px;font-size:.72rem}
+  body:not(.host-mode) #screen-game .draw-center{margin-top:4px;gap:10px}
+  body:not(.host-mode) #screen-game .draw-ball{width:66px;height:66px;font-size:2rem;border-width:4px}
+  body:not(.host-mode) #screen-game .draw-meta{padding:5px 8px;min-width:65px}
+  body:not(.host-mode) #screen-game .draw-meta b{font-size:1rem}
+  body:not(.host-mode) #screen-game .draw-meta span{font-size:.65rem}
+  body:not(.host-mode) #screen-game .called-card{
+    min-height:0;
+    height:54px;
+    margin:0;
+    padding:6px 8px;
+    overflow:hidden;
+  }
+  body:not(.host-mode) #screen-game .called-card .panel-head{margin-bottom:1px}
+  body:not(.host-mode) #screen-game .called-history{gap:5px;padding:0;overflow-x:auto;overflow-y:hidden}
+  body:not(.host-mode) #screen-game .called-ball{min-width:31px;height:31px;font-size:.72rem}
+  body:not(.host-mode) #screen-game .my-bingo-card{
+    min-height:0;
+    height:auto;
+    margin:0;
+    padding:7px 8px 5px;
+    display:flex;
+    flex-direction:column;
+    overflow:hidden;
+  }
+  body:not(.host-mode) #screen-game .my-card-top{margin-bottom:3px}
+  body:not(.host-mode) #screen-game .my-card-top h3{font-size:1rem}
+  body:not(.host-mode) #screen-game .card-id{padding:4px 7px;font-size:.72rem}
+  body:not(.host-mode) #screen-game .my-bingo-card .bingo-head{margin-bottom:3px}
+  body:not(.host-mode) #screen-game .my-bingo-card .bingo-head b{padding:5px 0;font-size:.75rem}
+  body:not(.host-mode) #screen-game .player-grid{
+    flex:1 1 auto;
+    min-height:0;
+    width:100%;
+    margin:0;
+    gap:4px;
+  }
+  body:not(.host-mode) #screen-game .player-grid .cell{font-size:clamp(.82rem,4.8vw,1.12rem);min-width:0}
+  body:not(.host-mode) #screen-game .my-bingo-card>.hint{display:none}
+
+  /* Host mobile: compact the main area and keep the page itself non-scrollable. */
+  body.host-mode #screen-game .game-layout{
+    grid-template-rows:minmax(0,1fr) minmax(185px,38dvh);
+  }
+  body.host-mode #screen-game .game-layout>main{
+    min-height:0;
+    overflow:hidden;
+    display:grid;
+    grid-template-rows:86px 50px minmax(0,1fr);
+    gap:6px;
+  }
+  body.host-mode #screen-game .draw-card{min-height:0;height:86px;margin:0;padding:6px 9px}
+  body.host-mode #screen-game .draw-center{margin-top:3px;gap:9px}
+  body.host-mode #screen-game .draw-ball{width:58px;height:58px;font-size:1.8rem;border-width:4px}
+  body.host-mode #screen-game .draw-meta{padding:4px 7px;min-width:60px}
+  body.host-mode #screen-game .draw-meta b{font-size:.92rem}
+  body.host-mode #screen-game .draw-meta span{font-size:.62rem}
+  body.host-mode #screen-game .called-card{min-height:0;height:50px;margin:0;padding:5px 8px;overflow:hidden}
+  body.host-mode #screen-game .called-history{gap:5px;overflow-x:auto;overflow-y:hidden}
+  body.host-mode #screen-game .called-ball{min-width:28px;height:28px;font-size:.66rem}
+  body.host-mode #screen-game .host-main-board{min-height:0;margin:0;padding:8px;overflow:hidden;display:flex;flex-direction:column}
+  body.host-mode #screen-game .host-main-board-head{margin-bottom:4px}
+  body.host-mode #screen-game .host-main-board-head h3{font-size:.92rem}
+  body.host-mode #screen-game .host-main-board-head strong{font-size:1.2rem}
+  body.host-mode #screen-game .number-board-large{min-height:0;overflow:hidden;grid-template-columns:repeat(9,minmax(0,1fr));gap:4px;grid-auto-rows:1fr}
+  body.host-mode #screen-game .number-board-large .number-dot{font-size:.67rem}
+  body.host-mode #screen-game .host-panel{min-height:0;overflow:hidden;max-height:none;height:auto}
+  body.host-mode #screen-game .host-section{padding:8px}
+  body.host-mode #screen-game .host-panel .btn{padding:9px 11px}
+  body.host-mode #screen-game .host-list{max-height:96px;overflow:auto}
+}
+
+@media(max-width:380px){
+  body:not(.host-mode) #screen-game .game-layout{grid-template-rows:88px 50px minmax(0,1fr);gap:5px}
+  body:not(.host-mode) #screen-game .draw-card{height:88px}
+  body:not(.host-mode) #screen-game .called-card{height:50px}
+  body.host-mode #screen-game .game-layout{grid-template-rows:minmax(0,1fr) minmax(175px,37dvh)}
+  body.host-mode #screen-game .game-layout>main{grid-template-rows:82px 46px minmax(0,1fr)}
+  body.host-mode #screen-game .draw-card{height:82px}
+  body.host-mode #screen-game .called-card{height:46px}
 }
