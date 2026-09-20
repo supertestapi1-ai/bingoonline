@@ -145,7 +145,7 @@ input:focus{border-color:#8aa46e;box-shadow:0 0 0 3px rgba(92,126,71,.14)}
 #screen-home .site-credit{position:absolute;right:22px;bottom:18px}
 .site-credit .credit-by,.site-credit .credit-support{color:#fff8e9!important;-webkit-text-fill-color:#fff8e9!important;text-decoration:none!important}
 .site-credit .credit-by{font-size:1.15rem}
-.site-credit .credit-support{font-size:.150rem}
+.site-credit .credit-support{font-size:1.150rem}
 @media(max-width:720px){
   #screen-home .home-shell{min-height:calc(100dvh - 6vh);padding-bottom:78px}
   #screen-home .site-credit{right:10px;bottom:10px;max-width:calc(100vw - 20px)}
